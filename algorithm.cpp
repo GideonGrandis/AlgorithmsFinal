@@ -1,0 +1,427 @@
+#include<iostream>
+#include <time.h>
+#include <sys/time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <functional>
+#include <queue>
+#include <vector>
+using namespace std;
+
+//Variables and structs
+int timeslots; //Number of timeslots
+int classrooms; //Number of classrooms
+int classes; //Number of classes
+int professors; //Number of professors
+int students; //Number of students
+
+struct aRoom { //object representing a room
+  int index; //Index of the room
+  int capacity; //Capacity of the room
+
+  //Overloading greater than operator for heap comparison
+  bool operator<(const aRoom& other) const {
+    return capacity < other.capacity;
+  }
+};
+
+struct aRoom** roomArray; //Array of room objects.
+std::priority_queue<struct aRoom> roomHeap; //maxHeap of room objects.
+
+struct aClass { //object representing a class
+  int index; //Index of the class (Check if you actually need this anywhere)
+  int popularity; //Number of students who want to take the class
+  int professor; //Professor who teaches the class
+  int timeslot; //Timeslot the class is in. -1 when unassigned.
+  int room; //Room the class is in. -1 when unassigned.
+  int* students; //Array of students enrolled in the class. Used as a bitfield on indices. i.e
+		 //1 if the student is enrolled in the class, 0 if the student is not enrolled
+		 //in the class. Should run faster than an expandable array.
+  int conflictScore; //The conflict score of the class.
+
+ //Overloading less than operator for heap comparison
+  bool operator<(const aClass& other) const {
+    return conflictScore < other.conflictScore;
+  }
+};
+
+struct aClass** classArray; //Array of class objects
+std::priority_queue<struct aClass> classHeap; //maxHeap of class objects.
+
+struct aStudent { //object representing a student. Honestly we don't really need this for our
+		  //algorithm, but since we're not focused on the runtime of the setup, and we
+		  //might still want to change our algorithm, I figured I'd add it anyways.
+  int index; //Index of the student
+  int prefClass[4]; //Preferred classes
+};
+
+struct aStudent** studentArray; //Array of students.
+
+int main(int argc, char *argv[]) {
+
+  struct timeval startA, stopA; //Clock
+  double secsA = 0;
+  gettimeofday(&startA, NULL);
+
+  struct timeval startC, stopC; //Clock
+  double secsC = 0;
+  gettimeofday(&startC, NULL);
+
+  //Setup
+  if (argc != 3) {
+    printf("Usage: ./algorithm [Contraints].txt [Preferences].txt\n");
+    return 0;
+  }
+
+  FILE *fptrConstraints; //I'm using c style file read/write since I'm more used to it, but I
+	      //can swap it out for cpp style if we'd prefer that.
+  FILE *fptrPreferences;
+
+  //Opening files & setting up parsing.
+  fptrConstraints = fopen(argv[1], "r");
+  if (fptrConstraints == NULL) {
+    printf("Error reading \"%s\".\n", argv[1]);
+    return 0;
+  }
+  fptrPreferences = fopen(argv[2], "r");
+  if (fptrPreferences == NULL) {
+    printf("Error reading \"%s\".\n", argv[2]);
+    return 0;
+  }
+
+  char line[1024 * 50]; //File buffer
+  line[0] = '\0';
+  char tempLine[1024]; //Line buffer
+  tempLine[0] = '\0';
+  char delimiters[3];
+  delimiters[0] = 9; delimiters[1] = 10; delimiters[2] = '\0'; //ASCII codes for weird tabs used in
+							       //the file format.
+
+  //Figured it was easier to just put the entire contents of the file into a seperate buffer
+  //instead of reading it line by line.
+  //There's probably a more elegant way to do this with c++ libraries, but I don't think it
+  //greatly affects the time. Also this is just the setup.
+  while (fgets(tempLine, 1024, fptrConstraints)) {
+    strncat(line, tempLine, 1024); 
+  }
+  line[(1024 * 50) - 1] = '\0';
+  //printf("{%s}\n", line);
+
+
+  //Parsing constraints data
+  //This whole section is sort of a mess to read, but there's really no other way
+  //to read the data from such a specific format.
+  char *token = strtok(line, delimiters); //"Class times"
+  //printf("[%s]\n", token);
+  token = strtok(NULL, delimiters); //timeslots
+  timeslots = atoi(token);
+  token = strtok(NULL, delimiters); //"Rooms"
+  token = strtok(NULL, delimiters); //classrooms
+  classrooms = atoi(token);
+  roomArray = (struct aRoom**) malloc(classrooms * sizeof(struct aRoom*)); //Create a new
+        								   //array of rooms
+  for (int i = 0; i < classrooms; i++) { //For each room
+    roomArray[i] = NULL;
+    struct aRoom *roomPointer = (struct aRoom*) malloc(sizeof(struct aRoom)); //Create a new room
+    roomArray[i] = roomPointer; //Add to the room array
+    token = strtok(NULL, delimiters); //index
+    roomArray[i]->index = atoi(token); //Assign the read index
+    token = strtok(NULL, delimiters); //capacity
+    roomArray[i]->capacity = atoi(token); //Assign the read capacity    
+  }
+  token = strtok(NULL, delimiters); //"Classes" 
+  token = strtok(NULL, delimiters); //classes
+  classes = atoi(token);
+  classArray = (struct aClass**) malloc(classes * sizeof(struct aClass*)); //Create a new
+                                                                           //array of classes
+  token = strtok(NULL, delimiters); //"Teachers"
+  token = strtok(NULL, delimiters); //professors
+  professors = atoi(token);
+  for (int i = 0; i < classes; i++) { //For each class
+    struct aClass *classPointer = (struct aClass*) malloc(sizeof(struct aClass)); //Create a new class
+    classArray[i] = classPointer; //Add to the class array
+    token = strtok(NULL, delimiters); //index
+    classArray[i]->index = atoi(token); //Assign the read index
+    token = strtok(NULL, delimiters); //professor
+    classArray[i]->professor = atoi(token); //Assign the read professor
+    classArray[i]->room = -1;
+    classArray[i]->timeslot = -1;
+    classArray[i]->conflictScore = -1;
+    classArray[i]->students = NULL;
+  }
+
+  //Setting up for parsing again.
+  strcpy(line, "\0");
+  strcpy(tempLine, "\0");
+  while (fgets(tempLine, 1024, fptrPreferences)) {
+    strncat(line, tempLine, 1024);
+  }
+  line[(1024 * 50) - 1] = '\0';
+  char delimitersPref[3];
+  delimitersPref[0] = 9; delimitersPref[1] = 10; delimitersPref[2] = ' '; 
+  delimitersPref[3] = '\0'; //Parsings a little different here.
+
+  //Parsing preferences data
+  token = strtok(line, delimitersPref); //"Students"
+  token = strtok(NULL, delimitersPref); //students
+  students = atoi(token);
+  studentArray = (struct aStudent**) malloc(students * sizeof(struct aStudent*)); //Create a new
+                                                                           //array of students
+  for (int i = 0; i < students; i++) { //For each student
+    struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
+    studentArray[i] = studentPointer; //Add to the student array
+    token = strtok(NULL, delimitersPref); //index
+    //printf("index:[%s]\n", token);
+    studentArray[i]->index = atoi(token); //Assign the read index
+    for (int j = 0; j < 4; j++) {
+      token = strtok(NULL, delimitersPref); //next prefered class
+      //printf("(%s)\n", token);
+      studentArray[i]->prefClass[j] = atoi(token);
+    }
+  }
+
+  //Adding student arrays to each class.
+  for (int i = 0; i < classes; i++) {
+    classArray[i]->students = (int*) malloc(students * sizeof(int)); //Create all of the student arrays
+    for (int j = 0; j < students; j++) {
+      classArray[i]->students[j] = 0;
+    }
+  }
+ 
+  gettimeofday(&stopA, NULL); //Clock
+  secsA = (double)(stopA.tv_usec - startA.tv_usec) / 1000000 + (double)(stopA.tv_sec - startA.tv_sec);
+  printf("Setup took %f seconds to run.\n", secsA);
+
+  printf("Timeslots: %d, Classrooms: %d, Classes: %d, Professors: %d, Students: %d.\n", timeslots,
+		  classrooms, classes, professors, students);
+  
+  struct timeval startB, stopB; //Clock
+  double secsB = 0;
+
+  gettimeofday(&startB, NULL);
+
+
+
+
+
+
+
+
+  //THE ALGORITHM:
+
+  //Initalizing the complete graph + heaps
+  int** G = (int**)malloc(classes * sizeof(int*)); //Graph G
+  for (int i = 0; i < classes; i++) {
+    G[i] = (int*)malloc(classes * sizeof(int));
+    for (int j = 0; j < classes; j++) {
+      G[i][j] = 0; //Inefficent, but probably need to leave this here since valgrind gets weird about int
+		   //initalization.
+    }
+  }
+
+  for (int i = 0; i < classrooms; i++) {
+    roomHeap.push(*roomArray[i]);
+  }
+  /*for (int i = 0; i < classrooms; i++) { //Debug code
+    struct aRoom tempRoom = roomHeap.top();
+    printf("Popped room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
+    roomHeap.pop();
+  }*/
+
+  for (int i = 0; i < classes; i++) {
+    classHeap.push(*classArray[i]);
+  }
+  /*for (int i = 0; i < classes; i++) { //Debug code
+    struct aClass tempClass = classHeap.top();
+    printf("Popped class %d of conflict score %d.\n", tempClass.index, tempClass.conflictScore);
+    classHeap.pop();
+  }*/
+
+  //We begin by making a weighted complete graph G with vertex set C, where each edge
+  //has weight equal to the number of people who want to take both of its endpoints. We
+  //then set the weight of classes with the same professor to infinity. We also store the total
+  //number of people who want to take each class.
+
+  //Building G
+  for (int i = 0; i < students; i++) {
+    for (int j = 0; j < 4; j++) {
+      for (int q = 0; q < 4; q++) {
+        if (j != q) {
+          G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1]++;
+	  //Can reduce the work by half, since we only need half the graph, figure that out at some point.
+	}
+      }
+      //classArray[studentArray[i]->prefClass[j]]->popularity++; //increase popularity of all 4 classes.
+    }
+  }
+	      //Edges have no direction, so make sure to only compute half of the graph.
+
+  for (int i = 0; i < classes; i++) {
+    for (int j = 0; j < classes; j++) {
+      printf("[%d]", G[i][j]);
+    } 
+    printf("\n");
+  }
+
+  //We then initialize a length t conflict score array [0, …, 0] for each class.
+
+
+
+  //We start by assigning the t largest classes C1, …, Ct to the largest room in the first time slot.
+
+
+
+
+  //For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
+  //the edge between C and Ci.
+
+
+
+
+  //Now, find the class C’ with the smallest minimum conflict score.
+
+
+
+
+  //Suppose this conflict score is for time slot j. If C’ fits in a room, put it in the smallest
+  //available room it fits in, otherwise put it in the largest available room.
+
+
+
+  //Increase the j-th conflict score of each class C by the weight of the edge between C and
+  //C’, unless C’ filled the last room, in which case set it to infinity.
+
+
+  //Repeat steps 5-7 until we’ve assigned every class to a room and time slot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  //Output
+  FILE *fptrOut;
+  fptrOut = fopen("output_schedule.txt", "w");
+  if (fptrOut == NULL) {
+    printf("Error opening file.\n");
+    return 0;
+  }
+  char buffer[1024];
+  buffer[0] = '\0';
+  char intBuff[10];
+  for (int i = 0; i < 10; i++) {
+    intBuff[i] = '\0';
+  }
+  char weirdTab[2];
+  weirdTab[0] = 9;
+  weirdTab[1] = '\0'; //Converting that weird tab char to a string. Probably should've just
+		      //done this with cpp strings...
+  char lineFeed[2];
+  lineFeed[0] = 10; //Converting line feed char to a string.
+  lineFeed[1] = '\0';
+  strncat(buffer, "Course", 7); //Building the string
+  strncat(buffer, weirdTab, 2);
+  strncat(buffer, "Room", 5);
+  strncat(buffer, weirdTab, 2);
+  strncat(buffer, "Teacher", 8);
+  strncat(buffer, weirdTab, 2);
+  strncat(buffer, "Time", 5);
+  strncat(buffer, weirdTab, 2);
+  strncat(buffer, "Students", 9);
+  strncat(buffer, lineFeed, 2);
+  fprintf(fptrOut, buffer); //Printing the first string to file.
+  int tempIndex = 0;
+  int tempRoom = 0;
+  int tempProfessor = 0;
+  int tempTimeslot = 0;
+  for (int i = 0; i < classes; i++) {
+    buffer[0] = '\0'; //Reseting the buffer
+    tempIndex = classArray[i]->index;
+    tempRoom = classArray[i]->room;
+    tempProfessor = classArray[i]->professor;
+    tempTimeslot = classArray[i]->timeslot;    
+    snprintf(intBuff, 10, "%d", tempIndex);
+    strncat(buffer, intBuff, 10);
+    strncat(buffer, weirdTab, 2);
+    snprintf(intBuff, 10, "%d", tempRoom);
+    strncat(buffer, intBuff, 10);
+    strncat(buffer, weirdTab, 2);
+    snprintf(intBuff, 10, "%d", tempProfessor);
+    strncat(buffer, intBuff, 10);
+    strncat(buffer, weirdTab, 2);
+    snprintf(intBuff, 10, "%d", tempTimeslot);
+    strncat(buffer, intBuff, 10);
+    strncat(buffer, weirdTab, 2);
+    for (int j = 0; j < students; j++) {
+      if (classArray[i]->students[j] == 1) { //This is classes * students to output. Not sure how
+					     //we feel about that.
+        snprintf(intBuff, 10, "%d", j);
+        strncat(buffer, intBuff, 10);
+        strncat(buffer, " ", 2);
+      }
+    }
+    if (i != classes - 1) {
+      strncat(buffer, lineFeed, 2);
+    }
+    fprintf(fptrOut, buffer);
+  }
+
+
+  gettimeofday(&stopB, NULL); //Clock
+  secsB = (double)(stopB.tv_usec - startB.tv_usec) / 1000000 + (double)(stopB.tv_sec - startB.tv_sec);
+  printf("Algorithm took %f seconds to run.\n", secsB);
+
+
+  //Closing files
+  fclose(fptrConstraints);
+  fclose(fptrPreferences);
+  fclose(fptrOut);
+
+  //Freeing objects/object arrays
+  for (int i = 0; i < classrooms; i++) {
+    free(roomArray[i]);
+  }
+  free(roomArray);
+  for (int i = 0; i < classes; i++) {
+    free(classArray[i]->students);
+    free(classArray[i]);
+  }
+  free(classArray);
+  for (int i = 0; i < classes; i++) {
+    free(G[i]);
+  }
+  free(G);
+  for (int i = 0; i < students; i++) {
+    free(studentArray[i]);
+  }
+  free(studentArray);
+
+  gettimeofday(&stopC, NULL); //Clock
+  secsC = (double)(stopC.tv_usec - startC.tv_usec) / 1000000 + (double)(stopC.tv_sec - startC.tv_sec);
+  printf("Program took %f seconds to run in total.\n", secsC);
+
+  return 0;
+}

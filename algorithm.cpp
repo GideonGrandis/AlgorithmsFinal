@@ -227,8 +227,12 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < classes; i++) {
     G[i] = (int*)malloc(classes * sizeof(int));
     for (int j = 0; j < classes; j++) {
-      G[i][j] = 0; //Inefficent, but probably need to leave this here since valgrind gets weird about int
+      if (i == j) {
+        G[i][j] = INT_MAX;
+      } else {
+        G[i][j] = 0; //Inefficent, but probably need to leave this here since valgrind gets weird about int
 		   //initalization.
+      }
     }
   }
 
@@ -264,22 +268,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  /*for (int i = 0; i < timeslots; i++) {
-    roomListSlots[i] = 
-    for (int j = 0; j < classrooms; i++) {
-      roomListSlots[i].insert(*roomArray[j]);
-      struct aRoom tempRoom = *roomListSlots[i].begin();
-      printf("Room: %d.\n", tempRoom.index);
-    }
-  }*/
-
-  /*for (int j = 0; j < timeslots; j++) {
-    for (std::set<struct aRoom>::iterator i = roomListSlots[j].begin(); i != roomListSlots[j].end(); i++) {
-      struct aRoom tempRoom = *i;
-      printf("Timeslot: Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
-    }
-  }*/
-
   //1. We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
   //then set the weight of classes with the same professor to infinity. We also store the total
@@ -291,7 +279,7 @@ int main(int argc, char *argv[]) {
       for (int q = 0; q < 4; q++) {
         if (j != q) {
           if (classArray[studentArray[i]->prefClass[j] - 1]->professor !=
-			  (classArray[studentArray[i]->prefClass[q] - 1]->professor)) {
+			  (classArray[studentArray[i]->prefClass[q] - 1]->professor)) { //Only checks if the professors are the same if the student wants to take both the classe.
             G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1]++;
           } else {
             G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1] = INT_MAX;
@@ -301,6 +289,7 @@ int main(int argc, char *argv[]) {
       classArray[studentArray[i]->prefClass[j] - 1]->popularity++; //increase popularity of all 4 classes.
     }
   }
+
 
   //Building maxHeap of popularity for classes
   for (int i = 0; i < classes; i++) {
@@ -332,8 +321,12 @@ int main(int argc, char *argv[]) {
     struct aClass tempClass = classHeap.top();
     tempClass.timeslot = 1;
     printf("Got class %d of popularity %d.\n", tempClass.index, tempClass.popularity);
-    tempClass.room = tempRoom.index;
+    tempClass.room = tempRoom.index; //One room for one timeslot, not all into the same timeslot.
     roomListSlots[0]->erase(tempRoom);
+    if (roomListSlots[0]->size() == 0) {
+      tempClass.conflictScores[i] = INT_MAX; //Think we need this to avoid classes trying to go
+					      //into rooms which have already been filled.
+    }
     classHeap.pop();
   } //Hopefully I understand this right? It's putting the largest classes with the largest rooms
     //t times in the first timeslot, right?
@@ -388,18 +381,20 @@ int main(int argc, char *argv[]) {
 
     printf("Size of roomList: %d.\n", roomList.size());
 
-    printf("No. of classes: %d. Smallest class: %d, timeslot: %d.\n", classes, smallestClass, smallestTimeslot);
+    printf("No. of classes: %d. Smallest class: %d, timeslot: %d, smalelst conflict score: %d.\n", classes, smallestClass, smallestTimeslot, smallest);
     classArray[smallestClass]->timeslot = smallestTimeslot + 1; //Assign class C' to the timeslot j.
-    
-    printf("Getting largest room in smallest timeslot");
-    struct aRoom tempRoom = *--roomListSlots[smallestTimeslot]->end();
+
+     
+    printf("Getting largest room in smallest timesloti.\n");
+    std::set<struct aRoom> initalSet = *roomListSlots[smallestTimeslot];
+    printf("Got the inital set of size %d.\n", initalSet.size());
+    struct aRoom tempRoom = *--initalSet.end();
 
     //struct aRoom tempRoom = *--roomList.end();
  
     printf("Checking to start loop.\n");
     if (tempRoom.capacity >= classArray[smallestClass]->popularity) { //Fits
-      for (std::set<struct aRoom>::iterator i = roomListSlots[smallestTimeslot]->begin(); i !=
-	 roomListSlots[smallestTimeslot]->end(); i++) {
+      for (std::set<struct aRoom>::iterator i = initalSet.begin(); i != initalSet.end(); i++) {
       //for (std::set<struct aRoom>::iterator i = roomList.begin(); i != roomList.end(); i++) {
         printf("Running for loop.\n");
         struct aRoom tempRoomTwo = *i;
@@ -407,7 +402,7 @@ int main(int argc, char *argv[]) {
         if (tempRoomTwo.capacity >= classArray[smallestClass]->popularity) { //Fits in smaller room.
           tempRoom = tempRoomTwo;
           printf("Ending early.\n");
-          i = roomListSlots[smallestTimeslot]->end(); //End for loop early
+          i = initalSet.end(); //End for loop early
           printf("This the issue?.\n");
         }
       }
@@ -415,7 +410,7 @@ int main(int argc, char *argv[]) {
 
     printf("REMOVING %d, %d.\n", tempRoom.index, tempRoom.capacity);
     classArray[smallestClass]->room = tempRoom.index; //Assign the room to the class
-    roomListSlots[smallestTimeslot]->erase(tempRoom); //Remove fitted room from the sorted array
+    initalSet.erase(tempRoom); //Remove fitted room from the sorted array
     printf("Done with step 6.\n");
 
     roomsFilled++;
@@ -431,7 +426,7 @@ int main(int argc, char *argv[]) {
       printf("Running step 7.\n");
       if (roomListSlots[smallestTimeslot]->size() != 0) {
         classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot]
-	    + G[i][smallestClass];
+	    + G[i][smallestClass];                                           //Check for integer overflow here.
       } else {
         classArray[i]->conflictScores[smallestTimeslot] = INT_MAX; //Set to infinity
         timeslotsFilled++;

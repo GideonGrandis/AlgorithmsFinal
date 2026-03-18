@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 #include <functional>
 #include <queue>
 #include <vector>
@@ -236,7 +237,7 @@ int main(int argc, char *argv[]) {
     printf("Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
   }
 
-  //We begin by making a weighted complete graph G with vertex set C, where each edge
+  //1. We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
   //then set the weight of classes with the same professor to infinity. We also store the total
   //number of people who want to take each class.
@@ -246,24 +247,27 @@ int main(int argc, char *argv[]) {
     for (int j = 0; j < 4; j++) {
       for (int q = 0; q < 4; q++) {
         if (j != q) {
-          G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1]++;
-	  //Can reduce the work by half, since we only need half the graph, figure that out at some point.
+          if (classArray[studentArray[i]->prefClass[j] - 1]->professor !=
+			  (classArray[studentArray[i]->prefClass[q] - 1]->professor)) {
+            G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1]++;
+          } else {
+            G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1] = INT_MAX;
+	  }
 	}
       }
       classArray[studentArray[i]->prefClass[j] - 1]->popularity++; //increase popularity of all 4 classes.
     }
   }
-	      //Edges have no direction, so make sure to only compute half of the graph.
 
   //Building maxHeap of popularity for classes
   for (int i = 0; i < classes; i++) {
     classHeap.push(*classArray[i]);
   }
-  for (int i = 0; i < classes; i++) { //Debug code
+  /*for (int i = 0; i < classes; i++) { //Debug code
     struct aClass tempClass = classHeap.top();
     printf("Popped class %d of popularity %d.\n", tempClass.index, tempClass.popularity);
     classHeap.pop();
-  }
+  }*/
 
   for (int i = 0; i < classes; i++) {
     for (int j = 0; j < classes; j++) {
@@ -272,55 +276,118 @@ int main(int argc, char *argv[]) {
     printf("\n");
   }
 
-  //We then initialize a length t conflict score array [0, …, 0] for each class.
+  //2. We then initialize a length t conflict score array [0, …, 0] for each class.
+    //Already did this bit in initalization of classes objects since its faster. Technically
+    //maybe cheats the time our algorithm runs a little bit, but frankly it all seems a little
+    //subjective what's neccescary initalization and initalization specific to our algorithm anyways.
+  
 
+  //3. We start by assigning the t largest classes C1, …, Ct to the largest room in the first time slot.
+  for (int i = 0; i < timeslots; i++) {
+    struct aRoom tempRoom = *roomList.rbegin(); //Gets the last/largest room in the list.
+    printf("Got room %d of size %d.\n", tempRoom.index, tempRoom.capacity);
+    struct aClass tempClass = classHeap.top();
+    tempClass.timeslot = i + 1;
+    printf("Got class %d of popularity %d.\n", tempClass.index, tempClass.popularity);
+    tempClass.room = tempRoom.index;
+    roomList.erase(tempRoom);
+    classHeap.pop();
+  } //Hopefully I understand this right? It's putting the largest classes with the largest rooms
+    //in each timeslot, right?
 
+  //Building roomList again.
+  for (int i = 0; i < classrooms; i++) {
+    roomList.insert(*roomArray[i]);
+  }
 
-  //We start by assigning the t largest classes C1, …, Ct to the largest room in the first time slot.
-
-
-
-
-  //For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
+  //4. For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
   //the edge between C and Ci.
 
+  for (int i = 0; i < timeslots; i++) {
+    for (int j = 0; j < classes; j++) {
+      if (G[j][i] != INT_MAX) { //Just worried about int overflow here. Shame c ints dont have infinity.
+        classArray[j]->conflictScores[i] = classArray[j]->conflictScores[i] + G[j][i];
+      } else {
+        classArray[j]->conflictScores[i] = INT_MAX;
+      }
+        //Hopefully I understand this right? Doesn't make a whole lot a sense to me
+	//at the moment, but I think this is what the psuedocode says?
+    }
+  }
 
-  //Now, find the class C’ with the smallest minimum conflict score.
+  //8. Repeat steps 5-7 until we’ve assigned every class to a room and time slot
 
+  int timeslotsFilled = 0;
+  int roomsFilled = 0;
+  int classesAdded = 0;
 
+  while (timeslotsFilled != timeslots && classesAdded != classes && roomsFilled != classrooms) {
+    printf("Running while loop.\n");
+    //5. Now, find the class C’ with the smallest minimum conflict score.
+    int smallest = INT_MAX;
+    int smallestClass = -1;
+    int smallestTimeslot = -1;
+    for (int i = 0; i < classes; i++) {
+      printf("Running step 5.\n");
+      for (int j = 0; j < timeslots; j++) {
+        if (classArray[i]->conflictScores[j] < smallest) {
+          smallest = classArray[i]->conflictScores[j];
+          smallestClass = i;
+    	  smallestTimeslot = j;
+        }
+      }
+    }
+    printf("Done with step 5.\n");
 
+	  //6. Suppose this conflict score is for time slot j (smallestTimeslot). If C’ fits in a room,
+	  //put it in the smallest available room it fits in, otherwise put it in the largest
+	  //available room.
 
-  //Suppose this conflict score is for time slot j. If C’ fits in a room, put it in the smallest
-  //available room it fits in, otherwise put it in the largest available room.
+    printf("Size of roomList: %d.\n", roomList.size());
 
+    classArray[smallestClass]->timeslot = smallestTimeslot + 1; //Assign class C' to the timeslot j.
+    
+    struct aRoom tempRoom = *--roomList.end();
+    if (tempRoom.capacity >= classArray[smallestClass]->popularity) { //Fits
+      for (std::set<struct aRoom>::iterator i = roomList.begin(); i != roomList.end(); i++) {
+        printf("Running for loop.\n");
+        struct aRoom tempRoomTwo = *i;
+        printf("Got room %d of capacity %d.\n", tempRoomTwo.index, tempRoomTwo.capacity);
+        if (tempRoomTwo.capacity >= classArray[smallestClass]->popularity) { //Fits in smaller room.
+          tempRoom = tempRoomTwo;
+          printf("Ending early.\n");
+          i = --roomList.end(); //End for loop early
+          printf("This the issue?.\n");
+        }
+      }
+    }
 
+    printf("REMOVING %d, %d.\n", tempRoom.index, tempRoom.capacity);
+    classArray[smallestClass]->room = tempRoom.index; //Assign the room to the class
+    roomList.erase(tempRoom); //Remove fitted room from the sorted array
+    printf("Done with step 6.\n");
 
-  //Increase the j-th conflict score of each class C by the weight of the edge between C and
-  //C’, unless C’ filled the last room, in which case set it to infinity.
+    roomsFilled++;
 
+    classesAdded++;
 
-  //Repeat steps 5-7 until we’ve assigned every class to a room and time slot
+    
 
+    //7. Increase the j-th conflict score of each class C by the weight of the edge between C and
+    //C’, unless C’ filled the last room, in which case set it to infinity.
 
+    for (int i = 0; i < classes; i++) {
+      printf("Running step 7.\n");
+      if (roomList.size() != 0) {
+        classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot]
+	    + G[i][smallestClass];
+      } else {
+        classArray[i]->conflictScores[smallestTimeslot] = INT_MAX; //Set to infinity
+        timeslotsFilled++;
+      }
+    }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  }
 
 
 

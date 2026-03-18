@@ -8,6 +8,8 @@
 #include <functional>
 #include <queue>
 #include <vector>
+#include <set>
+
 using namespace std;
 
 //Variables and structs
@@ -28,7 +30,7 @@ struct aRoom { //object representing a room
 };
 
 struct aRoom** roomArray; //Array of room objects.
-std::priority_queue<struct aRoom> roomHeap; //maxHeap of room objects.
+std::set<struct aRoom> roomList; //Ordered array of room objects, from smallest capacity to largest.
 
 struct aClass { //object representing a class
   int index; //Index of the class (Check if you actually need this anywhere)
@@ -39,11 +41,11 @@ struct aClass { //object representing a class
   int* students; //Array of students enrolled in the class. Used as a bitfield on indices. i.e
 		 //1 if the student is enrolled in the class, 0 if the student is not enrolled
 		 //in the class. Should run faster than an expandable array.
-  int conflictScore; //The conflict score of the class.
+  int* conflictScores; //The conflict scores of the class.
 
  //Overloading less than operator for heap comparison
   bool operator<(const aClass& other) const {
-    return conflictScore < other.conflictScore;
+    return popularity < other.popularity;
   }
 };
 
@@ -148,7 +150,11 @@ int main(int argc, char *argv[]) {
     classArray[i]->professor = atoi(token); //Assign the read professor
     classArray[i]->room = -1;
     classArray[i]->timeslot = -1;
-    classArray[i]->conflictScore = -1;
+    classArray[i]->popularity = 0;
+    classArray[i]->conflictScores = (int*) malloc(timeslots * sizeof(int));
+    for (int j = 0; j < timeslots; j++) {
+      classArray[i]->conflictScores[j] = 0;
+    }
     classArray[i]->students = NULL;
   }
 
@@ -211,7 +217,7 @@ int main(int argc, char *argv[]) {
 
   //THE ALGORITHM:
 
-  //Initalizing the complete graph + heaps
+  //Initalizing the complete graph
   int** G = (int**)malloc(classes * sizeof(int*)); //Graph G
   for (int i = 0; i < classes; i++) {
     G[i] = (int*)malloc(classes * sizeof(int));
@@ -221,23 +227,14 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  //Building sorted list of room sizes.
   for (int i = 0; i < classrooms; i++) {
-    roomHeap.push(*roomArray[i]);
+    roomList.insert(*roomArray[i]);
   }
-  /*for (int i = 0; i < classrooms; i++) { //Debug code
-    struct aRoom tempRoom = roomHeap.top();
-    printf("Popped room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
-    roomHeap.pop();
-  }*/
-
-  for (int i = 0; i < classes; i++) {
-    classHeap.push(*classArray[i]);
+  for (std::set<struct aRoom>::iterator i = roomList.begin(); i != roomList.end(); i++) {
+    struct aRoom tempRoom = *i;
+    printf("Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
   }
-  /*for (int i = 0; i < classes; i++) { //Debug code
-    struct aClass tempClass = classHeap.top();
-    printf("Popped class %d of conflict score %d.\n", tempClass.index, tempClass.conflictScore);
-    classHeap.pop();
-  }*/
 
   //We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
@@ -253,10 +250,20 @@ int main(int argc, char *argv[]) {
 	  //Can reduce the work by half, since we only need half the graph, figure that out at some point.
 	}
       }
-      //classArray[studentArray[i]->prefClass[j]]->popularity++; //increase popularity of all 4 classes.
+      classArray[studentArray[i]->prefClass[j] - 1]->popularity++; //increase popularity of all 4 classes.
     }
   }
 	      //Edges have no direction, so make sure to only compute half of the graph.
+
+  //Building maxHeap of popularity for classes
+  for (int i = 0; i < classes; i++) {
+    classHeap.push(*classArray[i]);
+  }
+  for (int i = 0; i < classes; i++) { //Debug code
+    struct aClass tempClass = classHeap.top();
+    printf("Popped class %d of popularity %d.\n", tempClass.index, tempClass.popularity);
+    classHeap.pop();
+  }
 
   for (int i = 0; i < classes; i++) {
     for (int j = 0; j < classes; j++) {
@@ -276,8 +283,6 @@ int main(int argc, char *argv[]) {
 
   //For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
   //the edge between C and Ci.
-
-
 
 
   //Now, find the class C’ with the smallest minimum conflict score.
@@ -407,6 +412,7 @@ int main(int argc, char *argv[]) {
   free(roomArray);
   for (int i = 0; i < classes; i++) {
     free(classArray[i]->students);
+    free(classArray[i]->conflictScores);
     free(classArray[i]);
   }
   free(classArray);

@@ -10,6 +10,7 @@
 #include <queue>
 #include <vector>
 #include <set>
+#include <memory>
 
 using namespace std;
 
@@ -32,6 +33,9 @@ struct aRoom { //object representing a room
 
 struct aRoom** roomArray; //Array of room objects.
 std::set<struct aRoom> roomList; //Ordered array of room objects, from smallest capacity to largest.
+
+struct std::vector<std::set<struct aRoom>*> roomListSlots; //array size t of ordered array of room objects,
+					     //from smallest capacity to largest.
 
 struct aClass { //object representing a class
   int index; //Index of the class (Check if you actually need this anywhere)
@@ -237,6 +241,45 @@ int main(int argc, char *argv[]) {
     printf("Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
   }
 
+  //Building sorted lists of room sizes.
+
+  //Allocating space for ordered arrays
+
+  for (int i = 0; i < timeslots; i++) {
+    std::set<struct aRoom>* tempSet = new set<struct aRoom>();
+    for (int j = 0; j < classrooms; j++) {
+      tempSet->insert(*roomArray[j]);
+    }
+    printf("Inserting set.\n");
+    roomListSlots.push_back(tempSet);
+  }
+
+  printf("Size of SlotsSet = %d.\n", roomListSlots.size());
+
+  for (std::set<struct aRoom>* i : roomListSlots) {
+    std::set<struct aRoom> tempSet = *i;
+    for (std::set<struct aRoom>::iterator j = tempSet.begin(); j != tempSet.end(); j++) {
+      struct aRoom tempRoom = *j;
+      printf("Room: %d.\n", tempRoom.index);
+    }
+  }
+
+  /*for (int i = 0; i < timeslots; i++) {
+    roomListSlots[i] = 
+    for (int j = 0; j < classrooms; i++) {
+      roomListSlots[i].insert(*roomArray[j]);
+      struct aRoom tempRoom = *roomListSlots[i].begin();
+      printf("Room: %d.\n", tempRoom.index);
+    }
+  }*/
+
+  /*for (int j = 0; j < timeslots; j++) {
+    for (std::set<struct aRoom>::iterator i = roomListSlots[j].begin(); i != roomListSlots[j].end(); i++) {
+      struct aRoom tempRoom = *i;
+      printf("Timeslot: Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
+    }
+  }*/
+
   //1. We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
   //then set the weight of classes with the same professor to infinity. We also store the total
@@ -283,22 +326,22 @@ int main(int argc, char *argv[]) {
   
 
   //3. We start by assigning the t largest classes C1, …, Ct to the largest room in the first time slot.
-  for (int i = 0; i < timeslots; i++) {
-    struct aRoom tempRoom = *roomList.rbegin(); //Gets the last/largest room in the list.
+  for (int i = 0; i < timeslots; i++) { //What if there are more timeslots than rooms?
+    struct aRoom tempRoom = *roomListSlots[0]->rbegin(); //Gets the last/largest room in the list.
     printf("Got room %d of size %d.\n", tempRoom.index, tempRoom.capacity);
     struct aClass tempClass = classHeap.top();
-    tempClass.timeslot = i + 1;
+    tempClass.timeslot = 1;
     printf("Got class %d of popularity %d.\n", tempClass.index, tempClass.popularity);
     tempClass.room = tempRoom.index;
-    roomList.erase(tempRoom);
+    roomListSlots[0]->erase(tempRoom);
     classHeap.pop();
   } //Hopefully I understand this right? It's putting the largest classes with the largest rooms
-    //in each timeslot, right?
+    //t times in the first timeslot, right?
 
   //Building roomList again.
-  for (int i = 0; i < classrooms; i++) {
+  /*for (int i = 0; i < classrooms; i++) {
     roomList.insert(*roomArray[i]);
-  }
+  }*/
 
   //4. For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
   //the edge between C and Ci.
@@ -345,18 +388,26 @@ int main(int argc, char *argv[]) {
 
     printf("Size of roomList: %d.\n", roomList.size());
 
+    printf("No. of classes: %d. Smallest class: %d, timeslot: %d.\n", classes, smallestClass, smallestTimeslot);
     classArray[smallestClass]->timeslot = smallestTimeslot + 1; //Assign class C' to the timeslot j.
     
-    struct aRoom tempRoom = *--roomList.end();
+    printf("Getting largest room in smallest timeslot");
+    struct aRoom tempRoom = *--roomListSlots[smallestTimeslot]->end();
+
+    //struct aRoom tempRoom = *--roomList.end();
+ 
+    printf("Checking to start loop.\n");
     if (tempRoom.capacity >= classArray[smallestClass]->popularity) { //Fits
-      for (std::set<struct aRoom>::iterator i = roomList.begin(); i != roomList.end(); i++) {
+      for (std::set<struct aRoom>::iterator i = roomListSlots[smallestTimeslot]->begin(); i !=
+	 roomListSlots[smallestTimeslot]->end(); i++) {
+      //for (std::set<struct aRoom>::iterator i = roomList.begin(); i != roomList.end(); i++) {
         printf("Running for loop.\n");
         struct aRoom tempRoomTwo = *i;
         printf("Got room %d of capacity %d.\n", tempRoomTwo.index, tempRoomTwo.capacity);
         if (tempRoomTwo.capacity >= classArray[smallestClass]->popularity) { //Fits in smaller room.
           tempRoom = tempRoomTwo;
           printf("Ending early.\n");
-          i = --roomList.end(); //End for loop early
+          i = roomListSlots[smallestTimeslot]->end(); //End for loop early
           printf("This the issue?.\n");
         }
       }
@@ -364,7 +415,7 @@ int main(int argc, char *argv[]) {
 
     printf("REMOVING %d, %d.\n", tempRoom.index, tempRoom.capacity);
     classArray[smallestClass]->room = tempRoom.index; //Assign the room to the class
-    roomList.erase(tempRoom); //Remove fitted room from the sorted array
+    roomListSlots[smallestTimeslot]->erase(tempRoom); //Remove fitted room from the sorted array
     printf("Done with step 6.\n");
 
     roomsFilled++;
@@ -378,7 +429,7 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < classes; i++) {
       printf("Running step 7.\n");
-      if (roomList.size() != 0) {
+      if (roomListSlots[smallestTimeslot]->size() != 0) {
         classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot]
 	    + G[i][smallestClass];
       } else {
@@ -386,7 +437,6 @@ int main(int argc, char *argv[]) {
         timeslotsFilled++;
       }
     }
-
   }
 
 
@@ -491,6 +541,10 @@ int main(int argc, char *argv[]) {
     free(studentArray[i]);
   }
   free(studentArray);
+
+  for (std::set<struct aRoom>* i : roomListSlots) {
+    delete i;
+  }
 
   gettimeofday(&stopC, NULL); //Clock
   secsC = (double)(stopC.tv_usec - startC.tv_usec) / 1000000 + (double)(stopC.tv_sec - startC.tv_sec);

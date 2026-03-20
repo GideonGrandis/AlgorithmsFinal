@@ -15,6 +15,9 @@
 using namespace std;
 
 //Variables and structs
+int studentPreferenceValue = 0;
+int studentPreferenceBestCase = 0;
+
 int timeslots; //Number of timeslots
 int classrooms; //Number of classrooms
 int classes; //Number of classes
@@ -108,7 +111,7 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  char line[1024 * 50]; //File buffer
+  char line[1024 * 3000]; //File buffer
   line[0] = '\0';
   char tempLine[1024]; //Line buffer
   tempLine[0] = '\0';
@@ -123,7 +126,7 @@ int main(int argc, char *argv[]) {
   while (fgets(tempLine, 1024, fptrConstraints)) {
     strncat(line, tempLine, 1024); 
   }
-  line[(1024 * 50) - 1] = '\0';
+  line[(1024 * 500) - 1] = '\0';
   //printf("{%s}\n", line);
 
 
@@ -145,6 +148,7 @@ int main(int argc, char *argv[]) {
     }
   }
   token = strtok(NULL, delimiters); //"Rooms"
+  printf("DOING ROOMS.\n");
   if (strcmp(token, "Rooms") != 0) { //If not rooms, then timeslot index 1.
     printf("File has timeslot data. Processing...\n");
     for (int i = 0; i < timeslots; i++) {
@@ -241,6 +245,7 @@ int main(int argc, char *argv[]) {
   classrooms = atoi(token);
   roomArray = (struct aRoom**) malloc(classrooms * sizeof(struct aRoom*)); //Create a new
         								   //array of rooms
+  printf("DOING CLASSROOMS.\n");
   for (int i = 0; i < classrooms; i++) { //For each room
     roomArray[i] = NULL;
     struct aRoom *roomPointer = (struct aRoom*) malloc(sizeof(struct aRoom)); //Create a new room
@@ -280,29 +285,54 @@ int main(int argc, char *argv[]) {
     classArray[i]->students = NULL;
   }
 
+  printf("DONE WITH PARSE 1.\n");
+
   //Setting up for parsing again.
   strcpy(line, "\0");
   strcpy(tempLine, "\0");
+  char tempLineCopy[1024 * 3000];
+  for (int i = 0; i < 1024 * 3000; i++) {
+    tempLineCopy[i] = '\0';
+  }
+  char tempDelim[2];
+  tempDelim[0] = 10;
+  tempDelim[1] = '\0';
   while (fgets(tempLine, 1024, fptrPreferences)) {
     strncat(line, tempLine, 1024);
   }
-  line[(1024 * 50) - 1] = '\0';
-  /*char delimitersPref[3];
+  line[(1024 * 3000) - 1] = '\0';
+  strncat(tempLineCopy, line, strlen(line));
+
+  int countCount = 0;
+  char* tempToken = strtok(tempLineCopy, tempDelim);
+  while (tempToken != NULL) {
+    countCount++;
+    printf("[%s].\n", tempToken);
+    tempToken = strtok(NULL, tempDelim);
+  }
+
+  printf("FOUND STUDENT SIZE OF %d.\n", countCount);
+
+
+  char delimitersPref[3];
   delimitersPref[0] = 9; delimitersPref[1] = 10; delimitersPref[2] = ' '; 
-  delimitersPref[3] = '\0'; //Parsings a little different here.*/
+  delimitersPref[3] = '\0'; //Parsings a little different here.
+  printf("PARING PREF DATA.\n");
 
   //Parsing preferences data
-  token = strtok(line, delimiters); //"Students"
-  token = strtok(NULL, delimiters); //students
+  token = strtok(line, delimitersPref); //"Students"
+  token = strtok(NULL, delimitersPref); //students
   students = atoi(token);
-  char spaceDelim[2];
+  printf("                         DEBUGGG GETTING %s.\n", token);
+  /*char spaceDelim[2];
   spaceDelim[0] = ' ';
-  spaceDelim[1] = '\0';
+  spaceDelim[1] = '\0';*/
   //printf("Getting student data...\n");
   studentArray = (struct aStudent**) malloc(students * sizeof(struct aStudent*)); //Create a new
                                                                            //array of students
+  
 
-  for (int i = 0; i < students; i++) { //For each student
+  /*for (int i = 0; i < students; i++) { //For each student
     struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
     studentArray[i] = studentPointer; //Add to the student array
    
@@ -325,7 +355,7 @@ int main(int argc, char *argv[]) {
       prefCount++;
       spaceToken = strtok_r(NULL, spaceDelim, &saveptr);
     }
-    studentArray[i]->prefClassCount = prefCount;
+    studentArray[i]->prefClassCount = 4;//prefCount;
     studentArray[i]->prefClass = (int*) malloc(prefCount * sizeof(int));
     for (int j = 0; j < prefCount; j++) {
       studentArray[i]->prefClass[j] = atoi(spaceTokenTwo);
@@ -334,9 +364,33 @@ int main(int argc, char *argv[]) {
 
 
     //printf("Pref class list:[%s]\n", token);
-    /*token = strtok(NULL, delimiters); //index
-     printf("Pref DEBUG:[%s]\n", token);*/
+    //token = strtok(NULL, delimiters); //index
+     //printf("Pref DEBUG:[%s]\n", token);
+  }*/
+  printf("DEBUG 1.\n");
+  
+
+
+  for (int i = 0; i < students; i++) { //For each student
+    struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
+     studentArray[i] = studentPointer; //Add to the student array
+    studentArray[i]->prefClassCount = 4;//prefCount;
+    studentArray[i]->prefClass = (int*) malloc(4 * sizeof(int));
+    token = strtok(NULL, delimitersPref); //index
+    
+    //printf("index:[%s]\n", token);
+    studentArray[i]->index = atoi(token); //Assign the read index
+    for (int j = 0; j < 4; j++) {
+      token = strtok(NULL, delimitersPref); //next prefered class
+      //printf("Trying to print.\n");
+      //printf("(%s)\n", token);
+      studentArray[i]->prefClass[j] = atoi(token);
+    }
   }
+   printf("DEBUG 2.\n");
+
+
+
 
   //Adding student arrays to each class.
   for (int i = 0; i < classes; i++) {
@@ -347,9 +401,20 @@ int main(int argc, char *argv[]) {
   }
 
   for (int i = 0; i < students; i++) { //Add students to classes' bitfields for later scheduling.
+    //printf("prefClassCount: %d.\n", studentArray[i]->prefClassCount);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
+      //printf("Students %d wants to take class %d, so adding...\n", i, studentArray[i]->prefClass[j]);
       classArray[studentArray[i]->prefClass[j] - 1]->students[i] = 1;
     }
+  }
+
+  //DEBUG
+  for (int i = 0; i < classes; i++) {
+    //printf("Class %d:\n ", i);
+    for (int j = 0; j < students; j++) {
+      //printf("[%d]", classArray[i]->students[j]);
+    }
+    //printf(".\n");
   }
  
   gettimeofday(&stopA, NULL); //Clock
@@ -540,7 +605,7 @@ int main(int argc, char *argv[]) {
     int smallestTimeslot = -1;
     for (int i = 0; i < classes; i++) {
       if (classArray[i]->inserted == 0) {
-      printf("Running step 5.\n");
+      //printf("Running step 5.\n");
         for (int j = 0; j < timeslots; j++) {
           if (classArray[i]->conflictScores[j] < smallest) {
             smallest = classArray[i]->conflictScores[j];
@@ -551,20 +616,20 @@ int main(int argc, char *argv[]) {
       }
     }
     if (smallestClass == -1) {
-      printf("All possible insertions made. Exiting loop.\n");
+      //printf("All possible insertions made. Exiting loop.\n");
       break;
     }
     
 
-    printf("Done with step 5.\n");
+    //printf("Done with step 5.\n");
 
 	  //6. Suppose this conflict score is for time slot j (smallestTimeslot). If C’ fits in a room,
 	  //put it in the smallest available room it fits in, otherwise put it in the largest
 	  //available room.
 
-    printf("Size of roomList: %ld.\n", roomList.size());
+    //printf("Size of roomList: %ld.\n", roomList.size());
 
-    printf("No. of classes: %d. Smallest class: %d, timeslot: %d, smallest conflict score: %d.\n", classes, smallestClass + 1, smallestTimeslot, smallest);
+    //printf("No. of classes: %d. Smallest class: %d, timeslot: %d, smallest conflict score: %d.\n", classes, smallestClass + 1, smallestTimeslot, smallest);
     classArray[smallestClass]->timeslot = smallestTimeslot + 1; //Assign class C' to the timeslot j.
 
      
@@ -634,7 +699,9 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    for (int i = 0; i < students; i++) { //Make sure students can't take two classes
+     //Improvements to make here, but will do for now!
+
+    /*for (int i = 0; i < students; i++) { //Make sure students can't take two classes
              				 //during the same timeslot.	
       if (classArray[smallestClass]->students[i] == 1) { //If student wants to take this class.
         for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.
@@ -644,15 +711,31 @@ int main(int argc, char *argv[]) {
 	  }
 	}
       }
-    }
-
+    }*/
 
     printf("TimeslotsFilled: %d, classesAdded: %d.\n", timeslotsFilled, classesAdded);
     timeslotsFilled != timeslots && classesAdded != classes && roomsFilled != classrooms;
   }
 
-
-
+  //Assign students.
+  
+  printf("                    Assigning students:\n");
+  for (int g = 0; g < classes; g++) {
+    int smallestClass = g;
+    int smallestTimeslot = (classArray[g]->timeslot) - 1;
+    for (int i = 0; i < students; i++) { //Make sure students can't take two classes
+                                           //during the same timeslot.
+      if (classArray[smallestClass]->students[i] == 1) { //If student wants to take this class.
+       printf("STUDENT wants to take class %d\n", g);
+        for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.i
+          if ((classArray[studentArray[i]->prefClass[j] - 1]->timeslot) - 1 == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j] - 1) {
+            printf("Student %d: Class %d and class %d have the same timeslot.\n", i + 1, smallestClass + 1, studentArray[i]->prefClass[j]);
+            classArray[studentArray[i]->prefClass[j] - 1]->students[i] = 0;
+ 	  }
+        }
+      }
+    }
+  }
 
 
 
@@ -721,6 +804,7 @@ int main(int argc, char *argv[]) {
         strncat(buffer, intBuff, 10);
         strncat(buffer, " ", 2);
 	roomSizeCheck++;
+	studentPreferenceValue++;
       }
     }
     if (i != classes - 1) {
@@ -775,6 +859,12 @@ int main(int argc, char *argv[]) {
   gettimeofday(&stopC, NULL); //Clock
   secsC = (double)(stopC.tv_usec - startC.tv_usec) / 1000000 + (double)(stopC.tv_sec - startC.tv_sec);
   printf("Program took %f seconds to run in total.\n", secsC);
+
+  studentPreferenceBestCase = students * 4;
+
+  printf("STUDENT PREFERENCE VALUE: %d.\n", studentPreferenceValue);
+  printf("BEST VALUE: %d.\n", studentPreferenceBestCase);
+  printf("Fit percentage: %f.\n", ((float) studentPreferenceValue)/((float)studentPreferenceBestCase));
 
   return 0;
 }

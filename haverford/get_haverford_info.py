@@ -168,7 +168,7 @@ def write_constraints_to_file(list_of_dicts, filename):
   f.close()
 
 if len(sys.argv) != 4:
-  print "Usage: " + sys.argv[0] + " <enrollment.csv> <student_prefs.txt> <constraints.txt>"
+  #print "Usage: " + sys.argv[0] + " <enrollment.csv> <student_prefs.txt> <constraints.txt>"
   exit(1) 
 list_of_dicts = get_data_list_of_dicts(sys.argv[1])
 write_prefs_to_file(list_of_dicts, sys.argv[2])

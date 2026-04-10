@@ -8,8 +8,12 @@
 #include <functional>
 #include <queue>
 #include <vector>
+#include <unordered_map>
 #include <set>
 #include <memory>
+
+#define LINE_SIZE 4096
+#define LINE_NUMBER 500
 
 //Represent timeslots abstractly, and when finding conflicts, just define them manually.
 //Find a way to combine data from Bryn mawr and Haverford of the same year.
@@ -52,7 +56,7 @@ struct std::vector<std::set<struct aRoom>*> roomListSlots; //array size t of ord
 					     //from smallest capacity to largest.
 
 struct aClass { //object representing a class
-  int index; //Index of the class (Check if you actually need this anywhere)
+  int index; //Index of the class
   int popularity; //Number of students who want to take the class
   int professor; //Professor who teaches the class
   int timeslot; //Timeslot the class is in. -1 when unassigned.
@@ -62,6 +66,8 @@ struct aClass { //object representing a class
 		 //in the class. Should run faster than an expandable array.
   int* conflictScores; //The conflict scores of the class.
   int inserted; //0 if the class has not been inserted into the schedule. 1 if it has been inserted.
+  int* openRooms; //Indices of the rooms the classes can be held in. 0 if it can't be held in that room, 1 if it can.
+  char subject[5]; //Subject of the class. 4 characters.
 
  //Overloading less than operator for heap comparison
   bool operator<(const aClass& other) const {
@@ -81,6 +87,12 @@ struct aStudent { //object representing a student. Honestly we don't really need
 };
 
 struct aStudent** studentArray; //Array of students.
+
+std::unordered_map<char*, int> roomMap; //Maps room names with indices. Used to find constraints quickly.
+std::unordered_map<int, int> professorMap; //Maps professor id's to indices. Used to deal with
+					   // the format the real world data is in.
+std::unordered_map<int, int> classMap; //Maps class id's to indices. Used to find preferences quickly.
+int professorCountGlobal = 0;
 
 int main(int argc, char *argv[]) {
 
@@ -114,31 +126,37 @@ int main(int argc, char *argv[]) {
     return 0;
   }
 
-  char line[1024 * 3000]; //File buffer
+  char line[LINE_SIZE * LINE_NUMBER]; //File buffer
   line[0] = '\0';
-  char tempLine[1024]; //Line buffer
+  char tempLine[LINE_SIZE]; //Line buffer
   tempLine[0] = '\0';
-  char delimiters[3];
-  delimiters[0] = 9; delimiters[1] = 10; delimiters[2] = '\0'; //ASCII codes for weird tabs used in
-							       //the file format.
 
   //Figured it was easier to just put the entire contents of the file into a seperate buffer
   //instead of reading it line by line.
   //There's probably a more elegant way to do this with c++ libraries, but I don't think it
   //greatly affects the time.
-  while (fgets(tempLine, 1024, fptrConstraints)) {
-    strncat(line, tempLine, 1024); 
+  while (fgets(tempLine, LINE_SIZE, fptrConstraints)) {
+    tempLine[LINE_SIZE - 1] = '\0';
+    strncat(line, tempLine, LINE_SIZE);
+    printf("%s", tempLine);
   }
-  line[(1024 * 500) - 1] = '\0';
+  //line[(LINE_SIZE * LINE_NUMBER) - 1] = '\0';
+  printf("LINE: %s\n\n", line);
 
-  char* saveptrMain; //Using multiple instances of strtok here, so we have to use strtok_r.
-  char* saveptrTime;
+  char *saveptrMain; //Using multiple instances of strtok here, so we have to use strtok_r.
+  char *saveptrTime;
+
+  char delimiters[3];
+  delimiters[0] = 9;
+  delimiters[1] = 10;
+  delimiters[2] = '\0';
 
   //Parsing constraints data
   //This whole section is sort of a mess to read, but there's really no other way
   //to read the data from such a specific format.
   char *token = strtok_r(line, delimiters, &saveptrMain); //"Class times"
   token = strtok_r(NULL, delimiters, &saveptrMain); //timeslots
+  //token = strtok_r(NULL, delimiters, &saveptrMain); //number of timeslots
   timeslots = atoi(token);
   timeslotTimeStarts = (int**) malloc(timeslots * sizeof(int*));
   timeslotTimeEnds = (int**) malloc(timeslots * sizeof(int*));
@@ -151,17 +169,17 @@ int main(int argc, char *argv[]) {
     }
   }
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Rooms"
-  printf("DEBUG: Inital token: %s.\n", token);
-  printf("DOING ROOMS.\n");
+  //printf("DEBUG: Inital token: %s.\n", token);
+  //printf("DOING ROOMS.\n");
   if (strcmp(token, "Rooms") != 0) { //If not rooms, then timeslot index 1.
-    printf("File has timeslot data. Processing...\n");
+    //printf("File has timeslot data. Processing...\n");
     for (int i = 0; i < timeslots; i++) {
-      printf("Getting timeslot time data for timeslot %d.\n", i + 1);
+      //printf("Getting timeslot time data for timeslot %d.\n", i + 1);
       timeslotTimesGiven = 1;
       int startTime = 0;
       int endTime = 0;
       token = strtok_r(NULL, delimiters, &saveptrMain); //TIME BLOCK
-      printf("Debug: Time block: %s.\n", token);
+      //printf("Debug: Time block: %s.\n", token);
       char spaceDelim[3];
       spaceDelim[0] = ' '; //Paring parsing parsing...
       spaceDelim[1] = ':';
@@ -172,26 +190,26 @@ int main(int argc, char *argv[]) {
       }
       strncpy(tokenCopy, token, 1024);
       char* spaceToken = strtok_r(tokenCopy, spaceDelim, &saveptrTime); //* (hour)
-      printf("Starthour: %s.\n", spaceToken);
+      //printf("Starthour: %s.\n", spaceToken);
       startTime = 60 * atoi(spaceToken);
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrTime); //* (minute)
-      printf("Startminute: %s.\n", spaceToken);
+      //printf("Startminute: %s.\n", spaceToken);
       startTime = startTime + atoi(spaceToken);
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrTime); //AM/PM
-      printf("StartAM/PM: %s.\n", spaceToken);
+      //printf("StartAM/PM: %s.\n", spaceToken);
       if (strcmp(spaceToken, "PM") == 0) {
-        startTime = startTime + (60 * 12);
+        //startTime = startTime + (60 * 12);
       } else if (strcmp(spaceToken, "AM") != 0) {
         printf("DEBUG: Error parsing timeslot data. Expected 'AM', but got '%s'.\n", spaceToken);
       }
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrTime); // (hour)
-      printf("Endhour: %s.\n", spaceToken);
+      //printf("Endhour: %s.\n", spaceToken);
       endTime = 60 * atoi(spaceToken);
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrTime); //:
-      printf("Endminute: %s.\n", spaceToken);
+      //printf("Endminute: %s.\n", spaceToken);
       endTime = endTime + atoi(spaceToken);
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrTime); //AM/PM
-      printf("EndAM/PM: %s.\n", spaceToken);
+      //printf("EndAM/PM: %s.\n", spaceToken);
       if (strcmp(spaceToken, "PM") == 0) {
         endTime = endTime + (60 * 12);
       } else if (strcmp(spaceToken, "AM") != 0) {
@@ -242,39 +260,79 @@ int main(int argc, char *argv[]) {
     }
   } else {
     token = strtok_r(NULL, delimiters, &saveptrMain); //Rooms
+    printf("Should be \'Rooms\': %s\n", token);
   }
+  printf("ISSUE TOKEN: %s.\n", token);
+  token = strtok_r(NULL, delimiters, &saveptrMain);
   classrooms = atoi(token);
   roomArray = (struct aRoom**) malloc(classrooms * sizeof(struct aRoom*)); //Create a new
         								   //array of rooms
-  printf("DEBUG: DOING CLASSROOMS.\n");
+  printf("DEBUG: DOING %d CLASSROOMS.\n", classrooms);
   for (int i = 0; i < classrooms; i++) { //For each room
     roomArray[i] = NULL;
     struct aRoom *roomPointer = (struct aRoom*) malloc(sizeof(struct aRoom)); //Create a new room
     roomArray[i] = roomPointer; //Add to the room array
     roomArray[i]->index = i + 1; //Index
     token = strtok_r(NULL, delimiters, &saveptrMain); //name
+    printf("Name: %s\n", token);
     for (int j = 0; j < 1024; j++) {
       roomArray[i]->name[j] = '\0'; //Initalize name.
     }
     strncpy(roomArray[i]->name, token, 1024); //Assign the read name.
+    roomMap[roomArray[i]->name] = i;
     token = strtok_r(NULL, delimiters, &saveptrMain); //capacity
     roomArray[i]->capacity = atoi(token); //Assign the read capacity    
   }
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Classes" 
-  token = strtok_r(NULL, delimiters, &saveptrMain); //classes
+  printf("1: %s\n", token);
+  token = strtok_r(NULL,  delimiters, &saveptrMain); //classes
+  printf("2: %s\n", token);
   classes = atoi(token);
   classArray = (struct aClass**) malloc(classes * sizeof(struct aClass*)); //Create a new
                                                                            //array of classes
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Teachers"
+  printf("3: %s\n", token);
   token = strtok_r(NULL, delimiters, &saveptrMain); //professors
+  printf("4: %s\n", token);
   professors = atoi(token);
+
+  char tenOnlyDelim[2];
+  tenOnlyDelim[0] = 10;
+  tenOnlyDelim[1] = '\0';
+  char* tenToken;
+  char* tenptr;
+
+  printf("DEBUG: DOING CLASSES\n");
+
   for (int i = 0; i < classes; i++) { //For each class
+    printf("run\n");
     struct aClass *classPointer = (struct aClass*) malloc(sizeof(struct aClass)); //Create a new class
     classArray[i] = classPointer; //Add to the class array
-    token = strtok_r(NULL, delimiters, &saveptrMain); //index
-    classArray[i]->index = atoi(token); //Assign the read index
+    token = strtok_r(NULL, tenOnlyDelim, &saveptrMain);
+    printf("[%s]\n", token);
+    tenToken = strtok_r(token, delimiters, &tenptr); //id
+    classMap[atoi(token)] = i;
+    tenToken = strtok_r(token, delimiters, &tenptr); //subject
+    for (int j = 0; j < 5; j++) {
+      classArray[i]->subject[j] = '\0';
+    }
+    strncpy(classArray[i]->subject, token, 4)
+    classArray[i]->subject[4] = '\0';
+    while (tenToken != NULL) {
+      printf("[%s]", tenToken);
+      classArray[i]->openRooms /*<-- malloc this and continue.*/
+      tenToken = strtok_r(NULL, delimiters, &tenptr);
+    }
+    /*token = strtok_r(NULL, delimiters, &saveptrMain); //index
+    classArray[i]->index = i; //Assign the read index
+    classMap[atoi(token)] = classArray[i]->index;
     token = strtok_r(NULL, delimiters, &saveptrMain); //professor
-    classArray[i]->professor = atoi(token); //Assign the read professor
+    if (professorMap.find(atoi(token)) == professorMap.end) {
+      professorMap[atoi(token)] = professorCountGlobal;
+      professorCountGlobal++;
+    }
+
+    classArray[i]->professor = professorMap.find(atoi(token)); //Assign the read professor
     classArray[i]->room = -1;
     classArray[i]->timeslot = -1;
     classArray[i]->popularity = 0;
@@ -283,50 +341,52 @@ int main(int argc, char *argv[]) {
     for (int j = 0; j < timeslots; j++) {
       classArray[i]->conflictScores[j] = 0;
     }
-    classArray[i]->students = NULL;
+    classArray[i]->students = NULL;*/
   }
 
+  return 0;
+
   printf("DEBUG: DONE WITH PARSING CONSTRAINTS.\n");
+
+  char* tempptr;
 
   //Setting up for parsing again.
   strcpy(line, "\0");
   strcpy(tempLine, "\0");
-  char tempLineCopy[1024 * 3000];
-  for (int i = 0; i < 1024 * 3000; i++) {
+  char tempLineCopy[LINE_SIZE * LINE_NUMBER];
+  for (int i = 0; i < LINE_SIZE; i++) {
     tempLineCopy[i] = '\0';
   }
   char tempDelim[2];
   tempDelim[0] = 10;
   tempDelim[1] = '\0';
-  while (fgets(tempLine, 1024, fptrPreferences)) {
-    strncat(line, tempLine, 1024);
+  while (fgets(tempLine, LINE_SIZE, fptrPreferences)) {
+    strncat(line, tempLine, LINE_SIZE - 1);
   }
-  line[(1024 * 3000) - 1] = '\0';
-  strncat(tempLineCopy, line, strlen(line));
+  line[(LINE_SIZE * LINE_NUMBER) - 1] = '\0';
+  strncat(tempLineCopy, line, LINE_SIZE * LINE_NUMBER - 1);
 
   int countCount = 0;
-  char* tempToken = strtok(tempLineCopy, tempDelim);
+  char* tempToken = strtok_r(tempLineCopy, tempDelim, &tempptr);
   while (tempToken != NULL) {
     countCount++;
     printf("[%s].\n", tempToken);
-    tempToken = strtok(NULL, tempDelim);
+    tempToken = strtok_r(NULL, tempDelim, &tempptr);
   }
 
   printf("DEBUG: FOUND STUDENT SIZE OF %d.\n", countCount);
 
-
-  char delimitersPref[3];
-  delimitersPref[0] = 9; delimitersPref[1] = 10; delimitersPref[2] = '\0';
-  char spaceDelim[2];
-  spaceDelim[0] = ' '; spaceDelim[1] = '\0';
 
   //Parsing preferences data
   char* saveptrNew;
   char* saveptrStudent;
   char* saveptrStudentSecond;
 
-  token = strtok_r(line, delimitersPref, &saveptrNew); //"Students"
-  token = strtok_r(NULL, delimitersPref, &saveptrNew); //students
+  char spaceDelim[2];
+  spaceDelim[0] = ' '; spaceDelim[1] = '\0';
+
+  token = strtok_r(line, delimiters, &saveptrNew); //"Students"
+  token = strtok_r(NULL, delimiters, &saveptrNew); //students
   students = atoi(token);
   studentArray = (struct aStudent**) malloc(students * sizeof(struct aStudent*)); //Create a new
                                                                            //array of students
@@ -336,10 +396,10 @@ int main(int argc, char *argv[]) {
     struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
     studentArray[i] = studentPointer; //Add to the student array
 
-    token = strtok_r(NULL, delimitersPref, &saveptrNew); //index
-    printf("Index: [%s]\n", token);
+    token = strtok_r(NULL, delimiters, &saveptrNew); //index
+    //printf("Index: [%s]\n", token);
     studentArray[i]->index = atoi(token);
-    token = strtok_r(NULL, delimitersPref, &saveptrNew); //classes
+    token = strtok_r(NULL, delimiters, &saveptrNew); //classes
 
     char tokenCopy[2048];
     char tokenCopyTwo[2048];
@@ -352,93 +412,26 @@ int main(int argc, char *argv[]) {
     char* spaceToken = strtok_r(tokenCopy, spaceDelim, &saveptrStudent);
     int classCount = 0;
     while (spaceToken != NULL) {
-      printf("           [%s]\n", spaceToken);
-
       classCount++;
       spaceToken = strtok_r(NULL, spaceDelim, &saveptrStudent);
     }
-    printf("Done wirh first.\n");
     studentArray[i]->prefClassCount = classCount;
     studentArray[i]->prefClass = (int*) malloc(classCount * sizeof(int));
-    printf("Done allocing.\n");
     for (int j = 0; j < classCount; j++) {
       studentArray[i]->prefClass[j] = 0;
-      printf(" (%d)", studentArray[i]->prefClass[j]);
     }
     classCount = 0;
     char* spaceTokenTwo = strtok_r(tokenCopyTwo, spaceDelim, &saveptrStudentSecond);
-    printf("\n");
     while (spaceTokenTwo != NULL) {
       if (atoi(spaceTokenTwo)) {
-        printf("           [%d]\n", atoi(spaceTokenTwo));
-        studentArray[i]->prefClass[i] = atoi(spaceTokenTwo);
+        studentArray[i]->prefClass[classCount] = atoi(spaceTokenTwo);
       }
       classCount++;
       spaceTokenTwo = strtok_r(NULL, spaceDelim, &saveptrStudentSecond);
     }
   }
-  printf("Return\n");
-  return 0;
-  printf("Shouldnt see this.\n");
 
-  /*for (int i = 0; i < students; i++) { //For each student
-    struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
-    studentArray[i] = studentPointer; //Add to the student array
-   
-    token = strtok(NULL, delimiters); //index
-    //printf("index:[%s]\n", token);
-    studentArray[i]->index = atoi(token); //Assign the read index
-    token = strtok(NULL, delimiters); //next prefered classes
-    //printf("Pref class list:[%s]\n", token);
-
-    char tokenCopy[1024];
-    char *saveptr;
-    for (int j = 0; j < 1024; j++) {
-      tokenCopy[j] = '\0';
-    }
-    strncpy(tokenCopy, token, 1024);
-    char* spaceToken = strtok_r(tokenCopy, spaceDelim, &saveptr);
-    char* spaceTokenTwo = strtok_r(tokenCopy, spaceDelim, &saveptr);
-    int prefCount = 0;
-    while (spaceToken != NULL) { //Probably an issue here?
-      prefCount++;
-      spaceToken = strtok_r(NULL, spaceDelim, &saveptr);
-    }
-    studentArray[i]->prefClassCount = 4;//prefCount;
-    studentArray[i]->prefClass = (int*) malloc(prefCount * sizeof(int));
-    for (int j = 0; j < prefCount; j++) {
-      studentArray[i]->prefClass[j] = atoi(spaceTokenTwo);
-      spaceTokenTwo = strtok_r(NULL, spaceDelim, &saveptr);
-    }
-
-
-    //printf("Pref class list:[%s]\n", token);
-    //token = strtok(NULL, delimiters); //index
-     //printf("Pref DEBUG:[%s]\n", token);
-  }*/
-  printf("DEBUG 1.\n");
-
-  for (int i = 0; i < students; i++) { //For each student
-    struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
-     studentArray[i] = studentPointer; //Add to the student array
-
-    studentArray[i]->prefClassCount = 4;//prefCount;
-    studentArray[i]->prefClass = (int*) malloc(4 * sizeof(int));
-    token = strtok(NULL, delimitersPref); //index
-    
-    //printf("index:[%s]\n", token);
-    studentArray[i]->index = atoi(token); //Assign the read index
-    for (int j = 0; j < 4; j++) {
-      token = strtok(NULL, delimitersPref); //next prefered class
-      //printf("Trying to print.\n");
-      //printf("(%s)\n", token);
-      studentArray[i]->prefClass[j] = atoi(token);
-    }
-  }
    printf("DEBUG 2.\n");
-
-
-
 
   //Adding student arrays to each class.
   for (int i = 0; i < classes; i++) {
@@ -449,9 +442,9 @@ int main(int argc, char *argv[]) {
   }
 
   for (int i = 0; i < students; i++) { //Add students to classes' bitfields for later scheduling.
-    //printf("prefClassCount: %d.\n", studentArray[i]->prefClassCount);
+    printf("prefClassCount: %d.\n", studentArray[i]->prefClassCount);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
-      //printf("Students %d wants to take class %d, so adding...\n", i, studentArray[i]->prefClass[j]);
+      printf("Students %d wants to take class %d, so adding...\n", i, studentArray[i]->prefClass[j]);
       classArray[studentArray[i]->prefClass[j] - 1]->students[i] = 1;
     }
   }
@@ -794,7 +787,7 @@ int main(int argc, char *argv[]) {
     printf("Error opening file.\n");
     return 0;
   }
-  char buffer[1024];
+  char buffer[LINE_SIZE];
   buffer[0] = '\0';
   char intBuff[10];
   for (int i = 0; i < 10; i++) {

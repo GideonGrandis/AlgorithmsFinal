@@ -318,8 +318,23 @@ int main(int argc, char *argv[]) {
     }
     strncpy(classArray[i]->subject, token, 4)
     classArray[i]->subject[4] = '\0';
+    classArray[i]->openRooms = (int*) malloc(sizeof(int) * classrooms);
+    if (tenToken == NULL) { //roomdata not given
+      for (int j = 0; j < classrooms; j++) {
+        classArray[i]->openRooms[j] = 1;
+      }
+    } else {
+      for (int j = 0; j < classrooms; j++) {
+        classArray[i]->openRooms[j] = 0;
+      }
+    }
     while (tenToken != NULL) {
       printf("[%s]", tenToken);
+      if (roomMap.find(tenToken) != roomMap.end) {
+        classArray[i]->openRooms[j]
+      } else {
+        printf("DEBUG: COULDNT FIND ROOM %s.\n", tentoken);
+      }
       classArray[i]->openRooms /*<-- malloc this and continue.*/
       tenToken = strtok_r(NULL, delimiters, &tenptr);
     }

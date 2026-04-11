@@ -138,10 +138,10 @@ int main(int argc, char *argv[]) {
   while (fgets(tempLine, LINE_SIZE, fptrConstraints)) {
     tempLine[LINE_SIZE - 1] = '\0';
     strncat(line, tempLine, LINE_SIZE);
-    printf("%s", tempLine);
+    //printf("%s", tempLine);
   }
   //line[(LINE_SIZE * LINE_NUMBER) - 1] = '\0';
-  printf("LINE: %s\n\n", line);
+  //printf("LINE: %s\n\n", line);
 
   char *saveptrMain; //Using multiple instances of strtok here, so we have to use strtok_r.
   char *saveptrTime;
@@ -260,9 +260,9 @@ int main(int argc, char *argv[]) {
     }
   } else {
     token = strtok_r(NULL, delimiters, &saveptrMain); //Rooms
-    printf("Should be \'Rooms\': %s\n", token);
+    //printf("Should be \'Rooms\': %s\n", token);
   }
-  printf("ISSUE TOKEN: %s.\n", token);
+  //printf("ISSUE TOKEN: %s.\n", token);
   token = strtok_r(NULL, delimiters, &saveptrMain);
   classrooms = atoi(token);
   roomArray = (struct aRoom**) malloc(classrooms * sizeof(struct aRoom*)); //Create a new
@@ -274,26 +274,32 @@ int main(int argc, char *argv[]) {
     roomArray[i] = roomPointer; //Add to the room array
     roomArray[i]->index = i + 1; //Index
     token = strtok_r(NULL, delimiters, &saveptrMain); //name
-    printf("Name: %s\n", token);
+    //printf("Name: %s\n", token);
     for (int j = 0; j < 1024; j++) {
       roomArray[i]->name[j] = '\0'; //Initalize name.
     }
-    strncpy(roomArray[i]->name, token, 1024); //Assign the read name.
-    roomMap[roomArray[i]->name] = i;
+    printf("       >>token: %s, length: %d.\n", token, strlen(token));
+    strncpy(roomArray[i]->name, token, 1024);
+    if (strcmp(roomArray[i]->name, "TAYF") == 0) {
+        printf("Tayf: %s", roomArray[i]->name);
+    }
+    printf("       >>name: %s.\n", roomArray[i]->name);
+    roomMap.insert({roomArray[i]->name, i});
+    printf("       >>map: %d.\n", roomMap.at(roomArray[i]->name));
     token = strtok_r(NULL, delimiters, &saveptrMain); //capacity
     roomArray[i]->capacity = atoi(token); //Assign the read capacity    
   }
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Classes" 
-  printf("1: %s\n", token);
+  //printf("1: %s\n", token);
   token = strtok_r(NULL,  delimiters, &saveptrMain); //classes
-  printf("2: %s\n", token);
+  //printf("2: %s\n", token);
   classes = atoi(token);
   classArray = (struct aClass**) malloc(classes * sizeof(struct aClass*)); //Create a new
                                                                            //array of classes
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Teachers"
-  printf("3: %s\n", token);
+  //printf("3: %s\n", token);
   token = strtok_r(NULL, delimiters, &saveptrMain); //professors
-  printf("4: %s\n", token);
+  //printf("4: %s\n", token);
   professors = atoi(token);
 
   char tenOnlyDelim[2];
@@ -302,22 +308,41 @@ int main(int argc, char *argv[]) {
   char* tenToken;
   char* tenptr;
 
+
+  for (const auto &p : roomMap) {
+    printf("%s is %d\n", p.first, p.second);
+  }
+
+
   printf("DEBUG: DOING CLASSES\n");
 
   for (int i = 0; i < classes; i++) { //For each class
     printf("run\n");
     struct aClass *classPointer = (struct aClass*) malloc(sizeof(struct aClass)); //Create a new class
     classArray[i] = classPointer; //Add to the class array
+    classArray[i]->index = i;
     token = strtok_r(NULL, tenOnlyDelim, &saveptrMain);
-    printf("[%s]\n", token);
+    //printf("[%s]\n", token);
     tenToken = strtok_r(token, delimiters, &tenptr); //id
-    classMap[atoi(token)] = i;
-    tenToken = strtok_r(token, delimiters, &tenptr); //subject
+    //printf("                              class id: %s\n", tenToken);
+    tenToken = strtok_r(NULL, delimiters, &tenptr); //professor id
+    //printf("                              prof id: %s\n", tenToken);
+    if (professorMap.find(atoi(tenToken)) != professorMap.end()) {
+      classArray[i]->professor = professorMap.at(atoi(tenToken));
+    } else {
+      professorMap[atoi(tenToken)] = professorCountGlobal;
+      classArray[i]->professor = professorMap.at(atoi(tenToken));
+      professorCountGlobal++;
+    }
+    classMap.insert({atoi(token), i});
+    tenToken = strtok_r(NULL, delimiters, &tenptr); //subject
+    //printf("                              subject: %s\n", tenToken);
     for (int j = 0; j < 5; j++) {
       classArray[i]->subject[j] = '\0';
     }
-    strncpy(classArray[i]->subject, token, 4)
+    strncpy(classArray[i]->subject, token, 4);
     classArray[i]->subject[4] = '\0';
+    tenToken = strtok_r(NULL, delimiters, &tenptr); //first room or NULL
     classArray[i]->openRooms = (int*) malloc(sizeof(int) * classrooms);
     if (tenToken == NULL) { //roomdata not given
       for (int j = 0; j < classrooms; j++) {
@@ -328,26 +353,29 @@ int main(int argc, char *argv[]) {
         classArray[i]->openRooms[j] = 0;
       }
     }
+
     while (tenToken != NULL) {
-      printf("[%s]", tenToken);
-      if (roomMap.find(tenToken) != roomMap.end) {
-        classArray[i]->openRooms[j]
-      } else {
-        printf("DEBUG: COULDNT FIND ROOM %s.\n", tentoken);
+      for (const auto &p : roomMap) {
+        if (strcmp(p.first, tenToken) == 0) {
+          classArray[i]->openRooms[p.second] = 1;
+          printf("tenToken match: %s", p.first);
+        }
       }
-      classArray[i]->openRooms /*<-- malloc this and continue.*/
+      //printf("[token: %s, length: %d, index from map: ", tenToken, strlen(tenToken));
+      /*if (roomMap.find(tenToken) != roomMap.end()) { Can't for the life of me figure how why this isn't working, but the
+       * 				code above is equivelant. Just less efficient.
+        printf("]\n %d]\n", roomMap.at(tenToken));
+        printf("String %s corresponds to room index %d.\n", tenToken, roomMap.at(tenToken));
+        classArray[i]->openRooms[roomMap.at(tenToken)] = 1;
+      } else {
+        printf("]\nDEBUG: COULDNT FIND ROOM %s.\n", tenToken);
+      }
+      classArray[i]->openRooms;*/
       tenToken = strtok_r(NULL, delimiters, &tenptr);
     }
-    /*token = strtok_r(NULL, delimiters, &saveptrMain); //index
-    classArray[i]->index = i; //Assign the read index
-    classMap[atoi(token)] = classArray[i]->index;
-    token = strtok_r(NULL, delimiters, &saveptrMain); //professor
-    if (professorMap.find(atoi(token)) == professorMap.end) {
-      professorMap[atoi(token)] = professorCountGlobal;
-      professorCountGlobal++;
+    for (int j = 0; j < classrooms; j++) { 
+      //printf("[%d]", (classArray[i]->openRooms[j]));
     }
-
-    classArray[i]->professor = professorMap.find(atoi(token)); //Assign the read professor
     classArray[i]->room = -1;
     classArray[i]->timeslot = -1;
     classArray[i]->popularity = 0;
@@ -356,10 +384,9 @@ int main(int argc, char *argv[]) {
     for (int j = 0; j < timeslots; j++) {
       classArray[i]->conflictScores[j] = 0;
     }
-    classArray[i]->students = NULL;*/
+    classArray[i]->students = NULL;
   }
 
-  return 0;
 
   printf("DEBUG: DONE WITH PARSING CONSTRAINTS.\n");
 
@@ -438,13 +465,29 @@ int main(int argc, char *argv[]) {
     classCount = 0;
     char* spaceTokenTwo = strtok_r(tokenCopyTwo, spaceDelim, &saveptrStudentSecond);
     while (spaceTokenTwo != NULL) {
-      if (atoi(spaceTokenTwo)) {
-        studentArray[i]->prefClass[classCount] = atoi(spaceTokenTwo);
-      }
+      /*printf("[[%s]\n", spaceTokenTwo);
+
+      printf("val: %d\n", classMap.at(atoi(spaceTokenTwo)));
+      for (const auto &p : classMap) {
+        if (p.first == atoi(spaceTokenTwo)) {
+          
+          //printf("class match: %d", p.first);
+        } else {
+          // printf("class fail: %d", p.first);
+	}
+      }*/
+
+
+
+      //if (atoi(spaceTokenTwo)) {
+      studentArray[i]->prefClass[classCount] = classMap.at(atoi(spaceTokenTwo));
+      //}
       classCount++;
       spaceTokenTwo = strtok_r(NULL, spaceDelim, &saveptrStudentSecond);
     }
   }
+
+  //return 0;
 
    printf("DEBUG 2.\n");
 
@@ -460,9 +503,11 @@ int main(int argc, char *argv[]) {
     printf("prefClassCount: %d.\n", studentArray[i]->prefClassCount);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
       printf("Students %d wants to take class %d, so adding...\n", i, studentArray[i]->prefClass[j]);
-      classArray[studentArray[i]->prefClass[j] - 1]->students[i] = 1;
+      printf("class index: %d.\n", studentArray[i]->prefClass[j]);
+      classArray[studentArray[i]->prefClass[j]]->students[i] = 1;
     }
   }
+
 
   //DEBUG
   for (int i = 0; i < classes; i++) {
@@ -477,8 +522,8 @@ int main(int argc, char *argv[]) {
   secsA = (double)(stopA.tv_usec - startA.tv_usec) / 1000000 + (double)(stopA.tv_sec - startA.tv_sec);
   printf("Setup took %f seconds to run.\n", secsA);
 
-  //printf("Timeslots: %d, Classrooms: %d, Classes: %d, Professors: %d, Students: %d.\n", timeslots,
-		 // classrooms, classes, professors, students);
+  printf("Timeslots: %d, Classrooms: %d, Classes: %d, Professors: %d, Students: %d.\n", timeslots,
+		 classrooms, classes, professors, students);
   
   struct timeval startB, stopB; //Clock
   double secsB = 0;
@@ -508,6 +553,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  printf("prof done.\n");
+
   //Building sorted list of room sizes.
   for (int i = 0; i < classrooms; i++) {
     roomList.insert(*roomArray[i]);
@@ -516,6 +563,8 @@ int main(int argc, char *argv[]) {
     struct aRoom tempRoom = *i;
     //printf("Got room %d of capacity %d.\n", tempRoom.index, tempRoom.capacity);
   }
+
+  printf("build 1 done.\n");
 
   //Building sorted lists of room sizes.
 
@@ -540,27 +589,36 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  printf("All setup done.\n");
+
   //1. We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
   //then set the weight of classes with the same professor to infinity. We also store the total
   //number of people who want to take each class.
 
   //Building G
+  printf("Test\n");
   for (int i = 0; i < students; i++) {
+     printf("Test2\n");
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
+       printf("Test3\n");
       for (int q = 0; q < studentArray[i]->prefClassCount; q++) {
+         printf("Test4\n");
         if (j != q) {
-          if (G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1] + 1 > -1) {
-            G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1]++;
+          printf("Class %d and class %d.\n", j, q);
+          if (G[(studentArray[i]->prefClass[j])][(studentArray[i]->prefClass[q])] > -1) {
+            G[(studentArray[i]->prefClass[j])][(studentArray[i]->prefClass[q])]++;
 	  } else {
-            G[(studentArray[i]->prefClass[j]) - 1][(studentArray[i]->prefClass[q]) - 1] = INT_MAX;
+            G[(studentArray[i]->prefClass[j])][(studentArray[i]->prefClass[q])] = INT_MAX;
 	  }
 	}
       }
-      classArray[studentArray[i]->prefClass[j] - 1]->popularity++; //increase popularity of all j classes.
+      printf("Student %d's pref class %d.\n", i, studentArray[i]->prefClass[j]);
+      classArray[studentArray[i]->prefClass[j]]->popularity++; //increase popularity of all j classes.
     }
   }
 
+  printf("G built.\n");
 
   //Building maxHeap of popularity for classes
   for (int i = 0; i < classes; i++) {
@@ -619,6 +677,8 @@ int main(int argc, char *argv[]) {
 
     classHeap.pop();
   }
+
+  printf("3 done.\n");
 
   //4. For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
   //the edge between C and Ci.
@@ -749,8 +809,8 @@ int main(int argc, char *argv[]) {
       //this fits in with our algorithm...
       //Makes sure a professor never teaches two different classes at the same time.
       if (classArray[i]->professor == classArray[smallestClass]->professor) {
-        printf("Class %d and class %d have the same professor. Added %d into timeslot %d.\n", smallestClass + 1, i + 1, 
-			smallestClass + 1, smallestTimeslot + 1);
+        printf("Class %d and class %d have the same professor. Added %d into timeslot %d.\n", smallestClass, i, 
+			smallestClass, smallestTimeslot);
         classArray[i]->conflictScores[smallestTimeslot] = INT_MAX;
       }
     }
@@ -778,15 +838,15 @@ int main(int argc, char *argv[]) {
   printf("                    Assigning students:\n");
   for (int g = 0; g < classes; g++) {
     int smallestClass = g;
-    int smallestTimeslot = (classArray[g]->timeslot) - 1;
+    int smallestTimeslot = (classArray[g]->timeslot);
     for (int i = 0; i < students; i++) { //Make sure students can't take two classes
                                            //during the same timeslot.
       if (classArray[smallestClass]->students[i] == 1) { //If student wants to take this class.
        printf("STUDENT wants to take class %d\n", g);
         for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.i
-          if ((classArray[studentArray[i]->prefClass[j] - 1]->timeslot) - 1 == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j] - 1) {
-            printf("Student %d: Class %d and class %d have the same timeslot.\n", i + 1, smallestClass + 1, studentArray[i]->prefClass[j]);
-            classArray[studentArray[i]->prefClass[j] - 1]->students[i] = 0;
+          if ((classArray[studentArray[i]->prefClass[j]]->timeslot) == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j]) {
+            printf("Student %d: Class %d and class %d have the same timeslot.\n", i, smallestClass, studentArray[i]->prefClass[j]);
+            classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
  	  }
         }
       }

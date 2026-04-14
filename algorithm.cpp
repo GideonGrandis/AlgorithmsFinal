@@ -110,7 +110,7 @@ int extensionFiveLimit = 0;
 int extensionFiveClassCount = 0;
 int extensionFiveExtraCount = 0;
 int ignoreOverlap = 0; //Ignores overlap between timeslots if provided in the data.
-
+int dataModeFlag = 0; //Outputs data in format for csv files.
 
 struct aStudent** studentArray; //Array of students.
 
@@ -312,17 +312,15 @@ int main(int argc, char *argv[]) {
           printf("Usage for extension five: -e5 (max number of student which can want to take a class before splitting into sections.)\n");
           return 0;
         }
+      } else if (strcmp(argv[i], "-d") == 0) {
+        dataModeFlag = 1;
       } else if (strcmp(argv[i], "-i") == 0) {
 	ignoreOverlap = 1;
       } else {
-        printf("Tag not recognized.\n Tags are:\n   -e1 (percentage of classes with room restrictions) for extension 1.\n   -e2 (percentage of classes with limit) (limit in minutes) for extension 2.\n   -e3 (flag, 0 for MWF to MW, 1 for MW to MWF) for extension 3.\n   -e4 (value to increase conflict scores of classes with the same subject by) for extension 4.\n   -e5 (max number of student which can want to take a class before splitting into sections) for extension 5.\n -i to ignore overlap.\n");
+        printf("Tag not recognized.\n Tags are:\n   -e1 (percentage of classes with room restrictions) for extension 1.\n   -e2 (percentage of classes with limit) (limit in minutes) for extension 2.\n   -e3 (flag, 0 for MWF to MW, 1 for MW to MWF) for extension 3.\n   -e4 (value to increase conflict scores of classes with the same subject by) for extension 4.\n   -e5 (max number of student which can want to take a class before splitting into sections) for extension 5.\n -i to ignore overlap.\n-d for output in .csv file format.\n");
         return 0;
       }
     }
-  }
-
-  if (extensionTwoFlag == 1) {
-    printf("Extension two values: percentage: %f. limit %d.\n", twoFlagPercentage, twoFlagLimit);
   }
 
   FILE *fptrConstraints; //I'm using c style file read/write since I'm more used to it, but I
@@ -812,12 +810,18 @@ int main(int argc, char *argv[]) {
     }
   }
  
+
   gettimeofday(&stopA, NULL); //Clock
   secsA = (double)(stopA.tv_usec - startA.tv_usec) / 1000000 + (double)(stopA.tv_sec - startA.tv_sec);
-  printf("Setup took %f seconds to run.\n", secsA);
+  if (dataModeFlag == 0) {
+    printf("Setup took %f seconds to run.\n", secsA);
 
-  printf("Timeslots: %d, Classrooms: %d, Classes: %d, Professors: %d, Students: %d.\n", timeslots,
-		 classrooms, classes, professors, students);
+    printf("Timeslots: %d, Classrooms: %d, Classes: %d, Professors: %d, Students: %d.\n", timeslots,
+  		 classrooms, classes, professors, students);
+  } else {
+    //printf("%f ", secsA);
+    printf("%d %d %d %d %d ", timeslots, classrooms, classes, professors, students);
+  }
   
   struct timeval startB, stopB; //Clock
   double secsB = 0;
@@ -826,7 +830,9 @@ int main(int argc, char *argv[]) {
 
   if (roomConflictGiven == 0 && extensionOneFlag == 1) {
     extensionOneFlag = 0;
-    printf("WARNING: Data was not provided for room conflicts. Extension one will not apply to the output.\n");
+    if (dataModeFlag == 0) {
+      printf("WARNING: Data was not provided for room conflicts. Extension one will not apply to the output.\n");
+    }
   }
 
   //THE ALGORITHM:
@@ -880,9 +886,9 @@ int main(int argc, char *argv[]) {
               if (classArray[studentArray[i]->prefClass[k]]->sectionId == classArray[j]->sectionId) { //Room is a secition of a preferred class.
                 studentArray[i]->prefClass[iterator] = j; //So add the section.
                 iterator++;
-		if (iterator > studentArray[i]->prefClassCount) {
+		/*if (iterator > studentArray[i]->prefClassCount) {
                   printf("DEBUG ERROR:  EXEEDING AVAILABLE SPACE.\n");
-		}
+		}*/
 	      }
 	    }
 	  }
@@ -975,14 +981,17 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
   if (extensionFourFlag == 1) {
     for (int i = 0; i < classes; i++) {
       for (int j = 0; j < classes; j++) {
         if (strcmp(classArray[i]->subject, classArray[j]->subject) == 0) {
-          if (G[i][j] != INT_MAX && G[i][j] + extensionFourValue > 0) {
+          if (G[i][j] != INT_MAX) {
             G[i][j] = G[i][j] + extensionFourValue;
+	    if (G[i][j] < 0) {
+              G[i][j] = 0;
+	    }
 	  }
-	} else {
 	}
       }
     }
@@ -1022,7 +1031,9 @@ int main(int argc, char *argv[]) {
   }
   if (extensionTwoFlag == 1) {
     if (timeslotTimesGiven == 0) {
-      printf("Timeslot data not provided. Extension two cannot apply to this output.\n");
+      if (dataModeFlag == 0) {
+        printf("Timeslot data not provided. Extension two cannot apply to this output.\n");
+      }
       extensionTwoFlag = 0;
     } else {
       int extensionTwoCount = (int) (twoFlagPercentage * classes);
@@ -1293,7 +1304,11 @@ int main(int argc, char *argv[]) {
 
   gettimeofday(&stopB, NULL); //Clock
   secsB = (double)(stopB.tv_usec - startB.tv_usec) / 1000000 + (double)(stopB.tv_sec - startB.tv_sec);
-  printf("Algorithm took %f seconds to run.\n", secsB);
+  if (dataModeFlag == 0) {
+    printf("Algorithm took %f seconds to run.\n", secsB);
+  } else {
+    //printf("%f ", secsB);
+  }
 
   //Closing files
   fclose(fptrConstraints);
@@ -1341,17 +1356,58 @@ int main(int argc, char *argv[]) {
 
   gettimeofday(&stopC, NULL); //Clock
   secsC = (double)(stopC.tv_usec - startC.tv_usec) / 1000000 + (double)(stopC.tv_sec - startC.tv_sec);
-  printf("Program took %f seconds to run in total.\n", secsC);
+  if (dataModeFlag == 0) {
+    printf("Program took %f seconds to run in total.\n", secsC);
+  } else {
+    printf("%f ", secsC);
+  }
 
   studentPreferenceBestCase = totalStudentExpectations;
 
-  if (extensionFiveFlag == 1) {
-    printf("Extension 5 - Number of extra classes added: %d.\n", extensionFiveExtraCount);
+  if (dataModeFlag == 0) {
+    if (extensionFiveFlag == 1) {
+      printf("Extension 5 - Number of extra classes added: %d.\n", extensionFiveExtraCount);
+    }
+    printf("PERCENTAGE OF CLASSES ASSIGNED %f.\n", ((float) (classes - unassignedCount)) / ((float) classes));
+    printf("STUDENT PREFERENCE VALUE: %d.\n", studentPreferenceValue);
+    printf("BEST VALUE: %d.\n", studentPreferenceBestCase);
+    printf("Fit percentage: %f.\n", ((float) studentPreferenceValue)/((float)studentPreferenceBestCase));
+  } else {
+    printf("%f ", ((float) (classes - unassignedCount)) / ((float) classes));
+    printf("%d ", studentPreferenceValue);
+    printf("%d ", studentPreferenceBestCase);
+    printf("%f ", ((float) studentPreferenceValue)/((float)studentPreferenceBestCase));
+    if (extensionOneFlag == 1) {
+      printf("%f ", oneFlagPercentage);
+    } else {
+      printf("NULL ");
+    }
+    if (extensionTwoFlag == 1) {
+      printf("%f %d ", twoFlagPercentage, twoFlagLimit);
+    } else if (dataModeFlag == 1) {
+      printf("NULL NULL ");
+    }
+    if (extensionThreeFlag == 1) {
+      if (extensionThreeDirection == 1) {
+        printf("MW->MWF ");
+      } else {
+        printf("MWF->MW ");
+      }
+    } else {
+      printf("NULL ");
+    }
+    if (extensionFourFlag == 1) {
+      printf("%d ", extensionFourValue);
+    } else {
+      printf("NULL ");
+    }
+    if (extensionFiveFlag == 1) {
+      printf("%d ", extensionFiveLimit);
+      printf("%d ", extensionFiveExtraCount);
+    } else {
+      printf("NULL NULL");
+    }
   }
-  printf("PERCENTAGE OF CLASSES ASSIGNED %f.\n", ((float) (classes - unassignedCount)) / ((float) classes));
-  printf("STUDENT PREFERENCE VALUE: %d.\n", studentPreferenceValue);
-  printf("BEST VALUE: %d.\n", studentPreferenceBestCase);
-  printf("Fit percentage: %f.\n", ((float) studentPreferenceValue)/((float)studentPreferenceBestCase));
 
   return 0;
 }

@@ -119,7 +119,7 @@ std::unordered_map<int, int> professorMap; //Maps professor id's to indices. Use
 					   // the format the real world data is in.
 char** professorIds; //Array of professor id's. Used exclusively to print output correctly.
 
-std::unordered_map<int, int> classMap; //Maps class id's to indices. Used to find preferences quickly.
+std::unordered_map<char*, int> classMap; //Maps class id's to indices. Used to find preferences quickly.
 int professorCountGlobal = 0;
 
 int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts class into room in timeslot. -1 if error. 0 if insertion wasn't
@@ -632,6 +632,7 @@ int main(int argc, char *argv[]) {
         classArray[i]->id[j] = '\0';
       }
       strncpy(classArray[i]->id, tenToken, 10);
+      classMap.insert({classArray[i]->id, i});
       tenToken = strtok_r(NULL, delimiters, &tenptr); //professor id
       professorIds[i] = (char*) malloc(sizeof(char) * 10);
       for (int j = 0; j < 10; j++) {
@@ -646,7 +647,6 @@ int main(int argc, char *argv[]) {
       }
       strncpy(professorIds[i], tenToken, 10);
       professorIds[i][9] = '\0';
-      classMap.insert({atoi(token), i});
       tenToken = strtok_r(NULL, delimiters, &tenptr); //subject
       for (int j = 0; j < 5; j++) {
         classArray[i]->subject[j] = '\0';
@@ -704,6 +704,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+
+
   char* tempptr;
 
   //Setting up for parsing again.
@@ -742,7 +744,8 @@ int main(int argc, char *argv[]) {
   students = atoi(token);
   studentArray = (struct aStudent**) malloc(students * sizeof(struct aStudent*)); //Create a new
                                                                            //array of students
-  
+
+
   for (int i = 0; i < students; i++) {
     struct aStudent *studentPointer = (struct aStudent*) malloc(sizeof(struct aStudent)); //Create a new student
     studentArray[i] = studentPointer; //Add to the student array
@@ -782,8 +785,21 @@ int main(int argc, char *argv[]) {
     classCount = 0;
     char* spaceTokenTwo = strtok_r(tokenCopyTwo, spaceDelim, &saveptrStudentSecond);
     while (spaceTokenTwo != NULL) {
-      studentArray[i]->prefClass[classCount] = classMap.at(atoi(spaceTokenTwo));
-      classCount++;
+      //studentArray[i]->prefClass[classCount] = -1;
+      int check = 0;
+      for (const auto &p : classMap) {
+	  //p.first[5] = '\0';
+	  if (strcmp(spaceTokenTwo, p.first) == 0) {
+            studentArray[i]->prefClass[classCount] = classMap.at(p.first); //Weird code. temp fix
+	    classCount++;
+	    check = 1;
+	    //printf("   [%d]\n", classMap.at(spaceTokenTwo));
+	  }
+      }
+      if (check == 0) {
+	studentArray[i]->prefClass[classCount] = -1;
+      }
+      //studentArray[i]->prefClass[classCount] = classMap.at(spaceTokenTwo);
       spaceTokenTwo = strtok_r(NULL, spaceDelim, &saveptrStudentSecond);
     }
   }
@@ -885,6 +901,8 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  
+
 
   //Initalizing the complete graph
   int** G = (int**)malloc(classes * sizeof(int*)); //Graph G
@@ -907,7 +925,6 @@ int main(int argc, char *argv[]) {
 
 
 
- // printf("prof done.\n");
 
   //Building sorted list of room sizes.
   for (int i = 0; i < classrooms; i++) {
@@ -945,7 +962,7 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < students; i++) {
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
       for (int q = 0; q < studentArray[i]->prefClassCount; q++) {
-        if (j != q) {
+        if (j != q && studentArray[i]->prefClass[j] != -1 && studentArray[i]->prefClass[q] != -1) {
           if (G[(studentArray[i]->prefClass[j])][(studentArray[i]->prefClass[q])] > -1) {
             G[(studentArray[i]->prefClass[j])][(studentArray[i]->prefClass[q])]++;
 	  } else {
@@ -953,7 +970,7 @@ int main(int argc, char *argv[]) {
 	  }
 	}
       }
-      if (extensionFiveFlag == 0) { //Already done if 1.
+      if (extensionFiveFlag == 0 && studentArray[i]->prefClass[j] != -1) { //Already done if 1.
         classArray[studentArray[i]->prefClass[j]]->popularity++; //increase popularity of all j classes.
       }
     }
@@ -970,6 +987,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
 
   //Building maxHeap of popularity for classes
   for (int i = 0; i < classes; i++) {
@@ -1030,6 +1048,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
 
   //3. We start by assigning the t largest classes C1, …, Ct to the largest room in the first time slot.
   for (int i = 0; i < timeslots; i++) {
@@ -1116,6 +1135,7 @@ int main(int argc, char *argv[]) {
       break;
     }
 
+
     //7. Increase the j-th conflict score of each class C by the weight of the edge between C and
     //C’, unless C’ filled the last room, in which case set it to infinity.
     if (insertClass(classArray[smallestClass], smallestTimeslot, 1) == 1) {
@@ -1166,15 +1186,17 @@ int main(int argc, char *argv[]) {
         if (classArray[smallestClass]->students[i] == 1 && classArray[smallestClass]->currentStudents < roomArray[classArray[smallestClass]->room]->capacity) { //If student wants to take this class and its open.
 	  classArray[g]->currentStudents++;
           for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.
-	    if (classArray[studentArray[i]->prefClass[j]]->sectionId == classArray[smallestClass]->sectionId && studentArray[i]->prefClass[j] != smallestClass) {
-              classArray[studentArray[i]->prefClass[j]]->students[i] = 0; //For extension 5. Makes sure students don't take two sections of the same class.
-	    }
-            if (classArray[studentArray[i]->prefClass[j]]->timeslot == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j]) {
-              classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
- 	    } else if (timeslotTimesGiven == 1 && smallestClass != studentArray[i]->prefClass[j]) { //Students also can't take classes which overlap time-wise.
-              if (roomConflictGiven == 1) {
-	        if (timeslotAdjacencies[smallestTimeslot][classArray[studentArray[i]->prefClass[j]]->timeslot] == 1) {
-                  classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
+            if (studentArray[i]->prefClass[j] != -1) {
+	      if (classArray[studentArray[i]->prefClass[j]]->sectionId == classArray[smallestClass]->sectionId && studentArray[i]->prefClass[j] != smallestClass) {
+                classArray[studentArray[i]->prefClass[j]]->students[i] = 0; //For extension 5. Makes sure students don't take two sections of the same class.
+	      }
+              if (classArray[studentArray[i]->prefClass[j]]->timeslot == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j]) {
+                classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
+ 	      } else if (timeslotTimesGiven == 1 && smallestClass != studentArray[i]->prefClass[j]) { //Students also can't take classes which overlap time-wise.
+                if (roomConflictGiven == 1) {
+	          if (timeslotAdjacencies[smallestTimeslot][classArray[studentArray[i]->prefClass[j]]->timeslot] == 1) {
+                    classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
+	          }
 	        }
 	      }
 	    }
@@ -1185,6 +1207,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+
 
   //Output
   FILE *fptrOut;

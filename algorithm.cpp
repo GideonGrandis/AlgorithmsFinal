@@ -271,14 +271,14 @@ int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts c
 	  classArray[i]->openRoomCount--;
 	  //printf("[class: %d; %d.]", i, classArray[i]->openRoomCount);
 	  if (classArray[i]->openRoomCount == 1) {
-            printf("     class %d has no more rooms left after insertion. So giving priotiy -i1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n", i);
+            //printf("     class %d has no more rooms left after insertion. So giving priotiy -i1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n", i);
             for (int j = 0; j < timeslots; j++) {
               if (classArray[i]->conflictScores[j] != INT_MAX) {
                 classArray[i]->conflictScores[j] = -1; //Give priority if its the only available room for the class.
 	      }
 	    }
 	  } else if (classArray[i]->openRoomCount == 0) {
-            printf("  Class %d hit 0. no hope.\n", i);
+           // printf("  Class %d hit 0. no hope.\n", i);
             for (int j = 0; j < timeslots; j++) {
               classArray[i]->conflictScores[j] = INT_MAX; //In case its really impossible to insert them all.
 	    }
@@ -1015,14 +1015,14 @@ int main(int argc, char *argv[]) {
 
   //THE ALGORITHM:
 
-  for (int i = 0; i < students; i++) {
-    printf("Student %d:", i);
+  /*for (int i = 0; i < students; i++) {
+   // printf("Student %d:", i);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
-      printf("[%d]", studentArray[i]->prefClass[j]);
+     // printf("[%d]", studentArray[i]->prefClass[j]);
     }
     printf("\n");
   }
-  printf("\n");
+  printf("\n");*/
 
   if (extensionFiveFlag == 1) {
     for (int i = 0; i < students; i++) {
@@ -1038,8 +1038,8 @@ int main(int argc, char *argv[]) {
       if (sectionCount < 0) {
         sectionCount = 0;
       }
-      if (sectionCount > 10) {
-        sectionCount = 10;
+      if (sectionCount > 9) {
+        sectionCount = 9;
       }
       //printf("pop %d / limit %d = %d.\n", classArray[i]->popularity, extensionFiveLimit, sectionCount);
       extensionFiveClassCount;
@@ -1089,11 +1089,11 @@ int main(int argc, char *argv[]) {
               //printf("Class index: %d.\n", studentArray[i]->prefClass[k]);
               if (classArray[studentArray[i]->prefClass[k]]->sectionId == classArray[j]->sectionId) { //Room is a secition of a preferred class.
                 //printf("test1\n");
-                printf("Class %s is a section of class %s.\n", classArray[j]->id, classArray[studentArray[i]->prefClass[k]]->id);
+                //printf("Class %s is a section of class %s.\n", classArray[j]->id, classArray[studentArray[i]->prefClass[k]]->id);
                 studentArray[i]->prefClass[iterator] = j; //So add the section.
                 iterator++;
 		if (iterator > studentArray[i]->prefClassCount) {
-                  printf("  EXEEDING AVAILABLE SPACE.\n");
+                  printf("DEBUG ERROR:  EXEEDING AVAILABLE SPACE.\n");
 		}
 	      } else {
                 //printf("test2\n");
@@ -1109,7 +1109,7 @@ int main(int argc, char *argv[]) {
     classes = extensionFiveClassCount;
   }
   
-  for (int i = 0; i < students; i++) {
+  /*for (int i = 0; i < students; i++) {
     printf("Student %d %d:", i, studentArray[i]->prefClassCount);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
       printf("[%s]", classArray[studentArray[i]->prefClass[j]]->id);
@@ -1118,7 +1118,7 @@ int main(int argc, char *argv[]) {
   }
   printf("\n");
 
-  printf("Iteration done.\n");
+  printf("Iteration done.\n");*/
 
   /*for (int i = 0; i < classes; i++) {
     //printf("Class: %s\n", classArray[i]->id);
@@ -1165,7 +1165,7 @@ int main(int argc, char *argv[]) {
 									    //anyways for
 									    //initalization.
         if (i != j) {
-          printf("class %s and %s have the same professor.\n", classArray[i]->id, classArray[j]->id);
+          //printf("class %s and %s have the same professor.\n", classArray[i]->id, classArray[j]->id);
 	}
         G[i][j] = INT_MAX;
       } else {
@@ -1178,7 +1178,7 @@ int main(int argc, char *argv[]) {
 
 
 
-  printf("prof done.\n");
+ // printf("prof done.\n");
 
   //Building sorted list of room sizes.
   for (int i = 0; i < classrooms; i++) {
@@ -1215,7 +1215,7 @@ int main(int argc, char *argv[]) {
     //printf("\n");
   }
 
-  printf("All setup done.\n");
+  //printf("All setup done.\n");
 
   //1. We begin by making a weighted complete graph G with vertex set C, where each edge
   //has weight equal to the number of people who want to take both of its endpoints. We
@@ -1225,7 +1225,7 @@ int main(int argc, char *argv[]) {
   //Building G
   //printf("Test\n");
   for (int i = 0; i < students; i++) {
-     printf("Test2 %d\n", i);
+    // printf("Test2 %d\n", i);
     for (int j = 0; j < studentArray[i]->prefClassCount; j++) {
        //printf("Test3\n");
       for (int q = 0; q < studentArray[i]->prefClassCount; q++) {
@@ -1264,7 +1264,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  printf("G built.\n");
+ // printf("G built.\n");
 
   //Building maxHeap of popularity for classes
   for (int i = 0; i < classes; i++) {
@@ -1666,15 +1666,15 @@ int main(int argc, char *argv[]) {
 	//printf("[[%d]].\n", roomArray[classArray[smallestClass]->room]->capacity);
 	//printf("[%d, %d]\n", classArray[g]->currentStudents,  roomArray[classArray[smallestClass]->room]->capacity);
         if (classArray[smallestClass]->students[i] == 1 && classArray[smallestClass]->currentStudents < roomArray[classArray[smallestClass]->room]->capacity) { //If student wants to take this class and its open.
-          printf("STUDENT %d wants to take class %s\n", i, classArray[smallestClass]->id);
+          //printf("STUDENT %d wants to take class %s\n", i, classArray[smallestClass]->id);
 	  classArray[g]->currentStudents++;
 	  //printf("Student %d added to class %d [%d/%d].\n", i, g, classArray[g]->currentStudents, roomArray[classArray[g]->room]->capacity);
           for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.
 	    if (classArray[studentArray[i]->prefClass[j]]->sectionId == classArray[smallestClass]->sectionId && studentArray[i]->prefClass[j] != smallestClass) {
-              printf("Student %d Section? %s %s\n", i, classArray[studentArray[i]->prefClass[j]]->id, classArray[smallestClass]->id);
+              //printf("Student %d Section? %s %s\n", i, classArray[studentArray[i]->prefClass[j]]->id, classArray[smallestClass]->id);
               classArray[studentArray[i]->prefClass[j]]->students[i] = 0; //For extension 5. Makes sure students don't take two sections of the same class.
 	    } else {
-              printf("Same or had different section: %s, %s.\n", classArray[studentArray[i]->prefClass[j]]->id, classArray[smallestClass]->id);
+              //printf("Same or had different section: %s, %s.\n", classArray[studentArray[i]->prefClass[j]]->id, classArray[smallestClass]->id);
 	    }
             if (classArray[studentArray[i]->prefClass[j]]->timeslot == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j]) {
               classArray[studentArray[i]->prefClass[j]]->students[i] = 0;

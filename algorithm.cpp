@@ -37,6 +37,8 @@ int** timeslotTimeStarts; //Keeps track of timeslot times for each timeslot.
 		    //timeslotTimeStarts[2][4] = 810, timeslotTimeEnds[2][4] = 1020.
 int** timeslotTimeEnds;
 
+int** timeslotAdjacencies; //Adjacency matrix for timeslots.
+
 struct aRoom { //object representing a room
   int index; //Index of the room
   int capacity; //Capacity of the room
@@ -56,7 +58,7 @@ struct std::vector<std::set<struct aRoom>*> roomListSlots; //array size t of ord
 
 struct aClass { //object representing a class
   int index; //Index of the class
-  int id; //Id of the class
+  char* id; //Id of the class
   int section; //Section of the class
   int popularity; //Number of students who want to take the class
   int professor; //Professor who teaches the class
@@ -65,6 +67,7 @@ struct aClass { //object representing a class
   int* students; //Array of students enrolled in the class. Used as a bitfield on indices. i.e
 		 //1 if the student is enrolled in the class, 0 if the student is not enrolled
 		 //in the class. Should run faster than an expandable array.
+  int currentStudents; //Number of students currently enrolled in the class.
   int* conflictScores; //The conflict scores of the class.
   int inserted; //0 if the class has not been inserted into the schedule. 1 if it has been inserted.
   int* openRooms; //Indices of the rooms the classes can be held in. 0 if it can't be held in that room, 1 if it can.
@@ -85,7 +88,7 @@ std::priority_queue<struct aClass> classHeap; //maxHeap of class objects.
 struct aStudent { //object representing a student. Honestly we don't really need this for our
 		  //algorithm, but since we're not focused on the runtime of the setup, and we
 		  //might still want to change our algorithm, I figured I'd add it anyways.
-  int index; //Index of the student
+  char* index; //Index/id of the student
   int prefClassCount; //Number of preferred classes.
   int* prefClass; //Preferred classes
 };
@@ -108,10 +111,12 @@ struct aStudent** studentArray; //Array of students.
 std::unordered_map<char*, int> roomMap; //Maps room names with indices. Used to find constraints quickly.
 std::unordered_map<int, int> professorMap; //Maps professor id's to indices. Used to deal with
 					   // the format the real world data is in.
+char** professorIds; //Array of professor id's. Used exclusively to print output correctly.
+
 std::unordered_map<int, int> classMap; //Maps class id's to indices. Used to find preferences quickly.
 int professorCountGlobal = 0;
 
-int timeslotOverlapCheck(int j, int timeslot) { //Input is two timeslots. Returns 1 if there is overlap, 0 if no overlap. -1 if poor data.
+/*int timeslotOverlapCheck(int j, int timeslot) { //Input is two timeslots. Returns 1 if there is overlap, 0 if no overlap. -1 if poor data.
   if (j < 0 || j > timeslots || timeslot < 0 || timeslot > timeslots) {
     printf("return error.\n");
     return -1;
@@ -137,7 +142,7 @@ int timeslotOverlapCheck(int j, int timeslot) { //Input is two timeslots. Return
     }
   }
   return 0;
-}
+}*/
 
 int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts class into room in timeslot. -1 if error. 0 if insertion wasn't
 						  //possible. 1 if class was succesfully inserted into timeslot.
@@ -188,10 +193,10 @@ int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts c
         }
 	if (timeslotTimesGiven == 1) {
           for (int j = 0; j < classes; j++) {
-            if (classArray[j]->room = tempRoom.index && classArray[j]->inserted == 1) { //If this class is in the same room.
-              if (timeslotOverlapCheck(timeslot, classArray[j]->timeslot) == 1) { //If there is an overlap in their timeslots.
+            if (classArray[j]->room == tempRoom.index && classArray[j]->inserted == 1) { //If this class is in the same room.
+              if (timeslotAdjacencies[timeslot][classArray[j]->timeslot] == 1) { //If there is an overlap in their timeslots.
                 endEarly = 0; //Then this is not a valid room.
-                //printf("Wasn't a valid room since class %d overlaps and has that room. [START, UNLIKELY...].\n", j);
+		printf("Wasn't a valid room since class %d overlaps and has that room. [START, UNLIKELY...].\n", j);
               }
             }
           }
@@ -208,11 +213,11 @@ int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts c
         }
 	if (timeslotTimesGiven == 1) {
           for (int j = 0; j < classes; j++) {
-            if (classArray[j]->room = tempRoom.index && classArray[j]->inserted == 1) { //If this class is in the same room.
-              if (timeslotOverlapCheck(timeslot, classArray[j]->timeslot) == 1) { //If there is an overlap in their timeslots.
+            if (classArray[j]->room == tempRoom.index && classArray[j]->inserted == 1) { //If this class is in the same room.
+              if (timeslotAdjacencies[timeslot][classArray[j]->timeslot] == 1) { //If there is an overlap in their timeslots.
                 endEarly = 0; //Then this is not a valid room.
-                //printf("Wasn't a valid room.\n");
-	      }
+                //printf("Wasn't a valid room since class %d overlaps and has that room.\n", j);
+              }
 	    }
 	  }
 	}
@@ -227,7 +232,7 @@ int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts c
       }
       if (extensionOneFlag == 1 && extensionOneCheck == 0) {
         tempClass->conflictScores[timeslot] = INT_MAX; //Class can't go into this timeslot. No rooms it can go in.
-        printf("DEBUG: Class can't go into this timeslot. No rooms it can go in.\n");
+        //printf("DEBUG: Class can't go into this timeslot. No rooms it can go in.\n");
         return 0;
       }
     }
@@ -248,23 +253,9 @@ int insertClass(struct aClass* tempClass, int timeslot, int begin) { //Inserts c
         classArray[i]->conflictScores[timeslot] = INT_MAX;
 	if (timeslotTimesGiven == 1) {
           for (int j = 0; j < timeslots; j++) {
-            if (timeslotOverlapCheck(j, timeslot) == 1) {
+            if (timeslotAdjacencies[j][timeslot] == 1) {
               classArray[i]->conflictScores[j] = INT_MAX;
 	    }
-            /*for (int k = 0; k < 7; k++) {
-              if (timeslotTimeStarts[timeslot][k] != -1 && (timeslotTimeStarts[j][k] != -1) { //If both have a time on this day
-                if ((timeslotTimeStarts[timeslot][k] < (timeslotTimeStarts[j][k]) { //if 1 starts before 2
-                  if (timeslotTimeEnds[timeslot][k] > timeslotTimeStarts[j][k]) { //Time conflict
-                    printf("Student discrepency found.\n");
-                    classArray[i]->conflictScores[j] = INT_MAX; //Class with the same professor can't go here either. Since they conflict time-wise.
-		  }
- 		} else if ((timeslotTimeStarts[timeslot][k] >= (timeslotTimeStarts[j][k]) { //if 2 starts before 1
-                  if (timeslotTimeEnds[j][k] > timeslotTimeStarts[timeslot][k]) { //Time conflict
-                    classArray[i]->conflictScores[j] = INT_MAX;
-                  }
-		}
-	      }
-	    }*/
           }
 	}
       }
@@ -426,7 +417,7 @@ int main(int argc, char *argv[]) {
   }
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Rooms"
   //printf("DEBUG: Inital token: %s.\n", token);
-  printf("DOING ROOMS.\n");
+  //printf("DOING ROOMS.\n");
   if (strcmp(token, "Rooms") != 0) { //If not rooms, then timeslot index 1.
     //printf("File has timeslot data. Processing...\n");
     for (int i = 0; i < timeslots; i++) {
@@ -574,19 +565,63 @@ int main(int argc, char *argv[]) {
     //printf("Should be \'Rooms\': %s\n", token);
   }
 
+  timeslotAdjacencies = (int**) malloc(sizeof(int*) * timeslots);
+  for (int i = 0; i < timeslots; i++) {
+    timeslotAdjacencies[i] = (int*) malloc(sizeof(int) * timeslots);
+    for (int j = 0; j < timeslots; j++) {
+      timeslotAdjacencies[i][j] = 0;
+    }
+  }
+  
 
+  if (timeslotTimesGiven == 1) {
+    for (int i = 0; i < timeslots; i++) {
+      for (int j = 0; j < timeslots; j++) {
+        if (i != j) { //Don't have timeslot be adjacent to themselves.
+          for (int k = 0; k < 7; k++) {
+            if (timeslotTimeStarts[i][k] != -1 && timeslotTimeStarts[j][k] != -1) { //If both have a time on this day
+              if (timeslotTimeStarts[i][k] < timeslotTimeStarts[j][k]) { //if 1 starts before 2
+                if (timeslotTimeEnds[i][k] > timeslotTimeStarts[j][k]) { //Time conflict
+                  //printf("[%d - %d] [%d - %d]\n", timeslotTimeStarts[i][k], timeslotTimeEnds[i][k], timeslotTimeStarts[j][k], timeslotTimeEnds[j][k]);
+                  //printf("overlap found. since end %d of %d comes after start %d of %d\n", timeslotTimeEnds[i][k], i, timeslotTimeStarts[j][k], j);
+                  timeslotAdjacencies[i][j] = 1;
+	          timeslotAdjacencies[j][i] = 1;
+                }
+              } else if (timeslotTimeStarts[i][k] >= timeslotTimeStarts[j][k]) { //if 2 starts before 1
+                if (timeslotTimeEnds[j][k] > timeslotTimeStarts[i][k]) { //Time conflict
+                  //printf("[%d - %d] [%d - %d]\n", timeslotTimeStarts[i][k], timeslotTimeEnds[i][k], timeslotTimeStarts[j][k], timeslotTimeEnds[j][k]);
+                  //printf("overlap found. since end %d of %d comes after start %d of %d\n", timeslotTimeEnds[j][k], j, timeslotTimeStarts[i][k], i);
+                  timeslotAdjacencies[i][j] = 1;
+                  timeslotAdjacencies[j][i] = 1;
+                }
+              } 
+            }
+          }
+	}
+      }
+    }
+  }
+
+  /*for (int i = 0; i < timeslots; i++) {
+    for (int j = 0; j < timeslots; j++) {
+      printf("[%d]", timeslotAdjacencies[i][j]);
+    }
+    printf("\n");
+  }
+
+  return 0;*/
 
   //printf("ISSUE TOKEN: %s.\n", token);
   token = strtok_r(NULL, delimiters, &saveptrMain); //Rooms
   classrooms = atoi(token);
   roomArray = (struct aRoom**) malloc(classrooms * sizeof(struct aRoom*)); //Create a new
         								   //array of rooms
-  printf("DEBUG: DOING %d CLASSROOMS.\n", classrooms);
+  //printf("DEBUG: DOING %d CLASSROOMS.\n", classrooms);
   for (int i = 0; i < classrooms; i++) { //For each room
     roomArray[i] = NULL;
     struct aRoom *roomPointer = (struct aRoom*) malloc(sizeof(struct aRoom)); //Create a new room
     roomArray[i] = roomPointer; //Add to the room array
-    roomArray[i]->index = i + 1; //Index
+    roomArray[i]->index = i; //Index
     token = strtok_r(NULL, delimiters, &saveptrMain); //name
     //printf("Name: %s\n", token);
     for (int j = 0; j < 1024; j++) {
@@ -601,7 +636,8 @@ int main(int argc, char *argv[]) {
     roomMap.insert({roomArray[i]->name, i});
     //printf("       >>map: %d.\n", roomMap.at(roomArray[i]->name));
     token = strtok_r(NULL, delimiters, &saveptrMain); //capacity
-    roomArray[i]->capacity = atoi(token); //Assign the read capacity    
+    printf("Got capacity of %d.\n", atoi(token));
+    roomArray[i]->capacity = atoi(token); //Assign the read capacity
   }
   token = strtok_r(NULL, delimiters, &saveptrMain); //"Classes" 
   //printf("1: %s\n", token);
@@ -632,16 +668,22 @@ int main(int argc, char *argv[]) {
   }*/
 
 
-  printf("DEBUG: DOING CLASSES\n");
+  //printf("DEBUG: DOING CLASSES\n");
+
+  professorIds = (char**) malloc(sizeof(char*) * classes);
 
   for (int i = 0; i < classes; i++) { //For each class
     //printf("run\n");
     struct aClass *classPointer = (struct aClass*) malloc(sizeof(struct aClass)); //Create a new class
     classArray[i] = classPointer; //Add to the class array
     classArray[i]->index = i;
+    classArray[i]->currentStudents = 0;
     if (i >= originalClasses) {
       classArray[i]->section = -2;
-      classArray[i]->id = -1;
+      classArray[i]->id = (char*) malloc(sizeof(char) * 10);
+      for (int j = 0; j < 10; j++) {
+        classArray[i]->id[j] = '\0';
+      }
       classArray[i]->professor = -1;
       for (int j = 0; j < 4; j++) {
         classArray[i]->subject[j] = '\0';
@@ -665,10 +707,19 @@ int main(int argc, char *argv[]) {
       token = strtok_r(NULL, tenOnlyDelim, &saveptrMain);
       //printf("[%s]\n", token);
       tenToken = strtok_r(token, delimiters, &tenptr); //id
-      classArray[i]->id = atoi(tenToken);
+      //classArray[i]->id = atoi(tenToken);
+      classArray[i]->id = (char*) malloc(sizeof(char) * 10);
+      for (int j = 0; j < 10; j++) {
+        classArray[i]->id[j] = '\0';
+      }
+      strncpy(classArray[i]->id, tenToken, 10);
       //printf("                              class id: %s\n", tenToken);
       tenToken = strtok_r(NULL, delimiters, &tenptr); //professor id
       //printf("                              prof id: %s\n", tenToken);
+      professorIds[i] = (char*) malloc(sizeof(char) * 10);
+      for (int j = 0; j < 10; j++) {
+        professorIds[i][j] = '\0';
+      }
       if (professorMap.find(atoi(tenToken)) != professorMap.end()) {
         classArray[i]->professor = professorMap.at(atoi(tenToken));
       } else {
@@ -676,6 +727,8 @@ int main(int argc, char *argv[]) {
         classArray[i]->professor = professorMap.at(atoi(tenToken));
         professorCountGlobal++;
       }
+      strncpy(professorIds[i], tenToken, 10);
+      professorIds[i][9] = '\0';
       classMap.insert({atoi(token), i});
       //printf("classMap: %d -> %d\n", atoi(token), classMap.at(atoi(token)));
       tenToken = strtok_r(NULL, delimiters, &tenptr); //subject
@@ -691,7 +744,7 @@ int main(int argc, char *argv[]) {
       classArray[i]->openRooms = (int*) malloc(sizeof(int) * classrooms);
       if (tenToken == NULL || ignoreOverlap == 1) { //roomdata not given
         roomConflictGiven = 0;
-        printf("room conflict not given.\n");
+        //printf("room conflict not given.\n");
         for (int j = 0; j < classrooms; j++) {
           classArray[i]->openRooms[j] = 1;
         }
@@ -761,7 +814,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  printf("DEBUG: DONE WITH PARSING CONSTRAINTS.\n");
+  //printf("DEBUG: DONE WITH PARSING CONSTRAINTS.\n");
 
   char* tempptr;
 
@@ -789,7 +842,7 @@ int main(int argc, char *argv[]) {
     tempToken = strtok_r(NULL, tempDelim, &tempptr);
   }
 
-  printf("DEBUG: FOUND STUDENT SIZE OF %d.\n", countCount);
+  //printf("DEBUG: FOUND STUDENT SIZE OF %d.\n", countCount);
 
 
   //Parsing preferences data
@@ -816,8 +869,13 @@ int main(int argc, char *argv[]) {
     studentArray[i] = studentPointer; //Add to the student array
 
     token = strtok_r(NULL, delimiters, &saveptrNew); //index
-    //printf("Index: [%s]\n", token);
-    studentArray[i]->index = atoi(token);
+    studentArray[i]->index = (char*) malloc(sizeof(char) * 10);
+    for (int j = 0; j < 10; j++) {
+      studentArray[i]->index[j] = '\0';
+    }
+    printf("Index: [%s]\n", token);
+    strncpy(studentArray[i]->index, token, 10);
+    //studentArray[i]->index = atoi(token);
     token = strtok_r(NULL, delimiters, &saveptrNew); //classes
 
     char tokenCopy[2048];
@@ -1136,16 +1194,57 @@ int main(int argc, char *argv[]) {
       infiniteCheck--;
     }
     classHeap.pop();
+
+    //Step 4
+    if (infiniteCheck != 0) {
+      for (int j = 0;  j < classes; j++) {
+        if (classArray[j]->conflictScores[i] < -1) {
+          classArray[j]->conflictScores[i] = INT_MAX;
+	}
+	if (G[tempClass->index][j] < -1) {
+          G[tempClass->index][j] = INT_MAX;
+	}
+	//printf("Conflict score of %d at timeslot %d was %d.\n", j, i, classArray[j]->conflictScores[i]);
+        //printf("Plus: %d.\n", G[tempClass->index][j]);
+	//printf("Equals: %d.\n", classArray[j]->conflictScores[i] + G[tempClass->index][j]);
+        if (classArray[j]->conflictScores[i] + G[tempClass->index][j] > -1) {
+          classArray[j]->conflictScores[i] = classArray[j]->conflictScores[i] + G[tempClass->index][j];
+	} else {
+          classArray[j]->conflictScores[i] = INT_MAX;
+	}
+	//printf("Conflict score of %d at timeslot %d is now %d.\n", j, i, classArray[j]->conflictScores[i]);
+
+	//For all classes. If a class overlaps with the class that was just inserted, then add that conflict with the oriignal iterating class as well.
+        if (roomConflictGiven == 1) {
+          for (int k = 0; k < classes; k++) {
+            if (classArray[k]->inserted == 1) {
+              if (timeslotAdjacencies[i][classArray[k]->timeslot] == 1) { //If this class overlaps with the one that was just inserted.
+                //printf("Class %d is at timeslot %d which overlaps with timeslot %d of inserted class %d. So increase adjacency of class %d by %d.\n", k, classArray[k]->timeslot, i, tempClass->index, j, G[k][j]);
+                if (G[k][j] < -1) {
+                  G[k][j] = INT_MAX;
+		}
+		if (classArray[j]->conflictScores[i] + G[k][j] > -1) {
+                  classArray[j]->conflictScores[i] = classArray[j]->conflictScores[i] + G[k][j]; //Then add the conflict between that class the original iterated one as well.
+		} else {
+                  classArray[j]->conflictScores[i] = INT_MAX;
+		}
+                //printf("Did this and the world didn't end.\n");
+	      }
+	    }
+	  }
+	}
+      }
+    }
+
     //printf("   insert check: %d\n", tempClass->inserted);
   }
-
-
 
   //4. For each i from 1 to t, we increase the i-th conflict score of each class C by the weight of
   //the edge between C and Ci.
 
-  for (int i = 0; i < timeslots; i++) {
+  /*for (int i = 0; i < timeslots; i++) {
     for (int j = 0; j < classes; j++) {
+      
       if (classArray[j]->conflictScores[i] < -1) { //Having issues with int overflow. Something unintended
 						   //is clearly getting through in a previous
 						   //step, but this should work as a hack fix-all.
@@ -1154,9 +1253,11 @@ int main(int argc, char *argv[]) {
       if (G[j][i] < -1) {
         G[j][i] = INT_MAX;
       }
-      //printf("Conflict score of %d at timeslot %d was %d.\n", j + 1, i + 1, classArray[j]->conflictScores[i]);
-      //printf("Plus: %d.\n", G[j][i]);
-      //printf("Equals: %d.\n", classArray[j]->conflictScores[i] + G[j][i]);
+
+      printf("Conflict score of %d at timeslot %d was %d.\n", j + 1, i + 1, classArray[j]->conflictScores[i]);
+      printf("Plus: %d.\n", G[j][i]);
+      printf("Equals: %d.\n", classArray[j]->conflictScores[i] + G[j][i]);
+
       if (classArray[j]->conflictScores[i] + G[j][i] > -1) { //Int overflow check.
         classArray[j]->conflictScores[i] = classArray[j]->conflictScores[i] + G[j][i];
       } else {
@@ -1164,7 +1265,29 @@ int main(int argc, char *argv[]) {
       }
       //printf("Conflict score of %d at timeslot %d is now %d.\n", j + 1, i + 1, classArray[j]->conflictScores[i]);
     }
-  }
+
+
+
+    if (roomConflictGiven == 1) {
+      for (int k = 0; k < classes; k++) {
+        if (classArray[k]->conflictScores[i] < -1) {
+          classArray[k]->conflictScores[i] = INT_MAX;
+	}
+	if (G[k][i] < -1) {
+          G[k][i] = INT_MAX;
+	}
+        if (timeslotAdjacencies[classArray[k]->timeslot][classArray[j]->timeslot] == 1) {
+          if (roomListSlots[classArray[k]->timeslot]->size() != 0 && (classArray[j]->conflictScores[classArray[k]->timeslot] + G[j][k] > -1)) {
+            if (classArray[j]->conflictScores[k] != INT_MAX && G[j][k] != INT_MAX) {
+              classArray[j]->conflictScores[k] = classArray[j]->conflictScores[j] + G[j][k];
+            } else {
+              classArray[j]->conflictScores[k] = INT_MAX;
+            }
+          }
+        }
+      }
+    }
+  }*/
 
   //8. Repeat steps 5-7 until we’ve assigned every class to a room and time slot
 
@@ -1263,9 +1386,25 @@ int main(int argc, char *argv[]) {
       
 
         //printf("DEBUG: %d, %d.\n", classArray[i]->conflictScores[smallestTimeslot], G[i][smallestClass]);
+
+        /*if (roomConflictGiven == 1) {
+          for (int j = 0; j < classes; j++) {
+            if (timeslotAdjacencies[classArray[j]->timeslot][classArray[i]->timeslot] == 1) {
+              if (roomListSlots[classArray[j]->timeslot]->size() != 0 && (classArray[i]->conflictScores[classArray[j]->timeslot] + G[i][j] > -1)) {
+                if (classArray[i]->conflictScores[j] != INT_MAX && G[i][j] != INT_MAX) {
+                  classArray[i]->conflictScores[j] = classArray[i]->conflictScores[j] + G[i][j];
+		} else {
+                  classArray[i]->conflictScores[j] = INT_MAX;
+		}
+	      }
+	    }
+	  }
+        }*/	
+
         if ((roomListSlots[smallestTimeslot]->size() != 0) && (classArray[i]->conflictScores[smallestTimeslot] + G[i][smallestClass] > -1)) {
           classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot]
 	      + G[i][smallestClass];
+          
 	  if (strcmp(classArray[i]->subject, classArray[smallestClass]->subject) == 0) { //Extension four increase. Default is 0.
               //printf("Class %d and %d have the same subject %s %s.\n", smallestTimeslot, i, classArray[i]->subject, classArray[smallestClass]->subject);
              classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot] + extensionFourValue;
@@ -1276,6 +1415,43 @@ int main(int argc, char *argv[]) {
             timeslotsFilled++;
   	  }
         }
+
+        //For all classes. If a class overlaps with the class that was just inserted, then add that conflict with the oriignal iterating class as well.
+        if (roomConflictGiven == 1) {
+          for (int j = 0; j < classes; j++) {
+            if (classArray[j]->inserted == 1) {
+              if (timeslotAdjacencies[smallestTimeslot][classArray[j]->timeslot] == 1) { //If this class overlaps with the one that was just inserted.
+                //printf("New:Class %d is at timeslot %d which overlaps with timeslot %d of inserted class %d. So increase adjacency of class %d by %d.\n", j, classArray[j]->timeslot, smallestTimeslot, smallestClass, i, G[j][i]);
+                if (G[j][i] < -1) {
+                  G[j][i] = INT_MAX;
+                }
+                if (classArray[i]->conflictScores[smallestTimeslot] + G[j][i] > -1) {
+                  classArray[i]->conflictScores[smallestTimeslot] = classArray[i]->conflictScores[smallestTimeslot] + G[j][i]; //Then add the conflict between that class the original iterated one as well.
+                } else {
+                  classArray[i]->conflictScores[smallestTimeslot] = INT_MAX;
+                }
+                //printf("Did this and the world didn't end.\n");
+              }
+            }
+          }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         //printf("test1\n");
 
         //Added this myself to see if it runs with this. Don't know how
@@ -1315,23 +1491,37 @@ int main(int argc, char *argv[]) {
     if (classArray[g]->inserted == 1) {
       int smallestClass = g;
       int smallestTimeslot = (classArray[g]->timeslot);
+      //printf("or here?\n");
       for (int i = 0; i < students; i++) { //Make sure students can't take two classes
                                            //during the same timeslot.
-        if (classArray[smallestClass]->students[i] == 1) { //If student wants to take this class.
-         //printf("STUDENT wants to take class %d\n", g);
+        /*printf("here\n");
+	printf("Room of %d is %d.\n", smallestClass, classArray[smallestClass]->room);
+	for (int k = 0; k < classrooms; k++) {
+          printf("ROOM %d: cap %d.\n", k, roomArray[k]->capacity);
+	}
+	printf("[[%d]].\n", roomArray[classArray[smallestClass]->room]->capacity);
+	printf("[%d, %d]\n", classArray[g]->currentStudents,  roomArray[classArray[smallestClass]->room]->capacity);*/
+        if (classArray[smallestClass]->students[i] == 1 && classArray[smallestClass]->currentStudents < roomArray[classArray[smallestClass]->room]->capacity) { //If student wants to take this class and its open.
+          printf("STUDENT wants to take class %d\n", g);
+	  classArray[g]->currentStudents++;
+	  printf("Student %d added to class %d [%d/%d].\n", i, g, classArray[g]->currentStudents, roomArray[classArray[g]->room]->capacity);
           for (int j = 0; j < studentArray[i]->prefClassCount; j++) { //Then the student can't take any other classes during this timeslot.i
-            //printf("Got here\n");
+            printf("Got here\n");
             if ((classArray[studentArray[i]->prefClass[j]]->timeslot) == smallestTimeslot && smallestClass != studentArray[i]->prefClass[j]) {
-              //printf("Student %d: Class %d and class %d have the same timeslot.\n", i, smallestClass, studentArray[i]->prefClass[j]);
+              printf("Student %d: Class %d and class %d have the same timeslot.\n", i, smallestClass, studentArray[i]->prefClass[j]);
               classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
  	    } else if (timeslotTimesGiven == 1 && smallestClass != studentArray[i]->prefClass[j]) { //Students also can't take classes which overlap time-wise.
-	      if (timeslotOverlapCheck(smallestTimeslot, classArray[studentArray[i]->prefClass[j]]->timeslot) == 1) {
-                //printf("Student is not NOT ALLOWED to take class %d. Since timeslot %d == timeslot %d of a class the student is taking.\n", classArray[studentArray[i]->prefClass[j]]->index,  classArray[studentArray[i]->prefClass[j]]->timeslot, smallestTimeslot);
-                classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
+              if (roomConflictGiven == 1) {
+	        if (timeslotAdjacencies[smallestTimeslot][classArray[studentArray[i]->prefClass[j]]->timeslot] == 1) {
+                  //printf("Student is not NOT ALLOWED to take class %d. Since timeslot %d == timeslot %d of a class the student is taking.\n", classArray[studentArray[i]->prefClass[j]]->index,  classArray[studentArray[i]->prefClass[j]]->timeslot, smallestTimeslot);
+                  classArray[studentArray[i]->prefClass[j]]->students[i] = 0;
+	        }
 	      }
 	    }
           }
-        }
+        } else {
+          classArray[smallestClass]->students[i] = 0;
+	}
       }
     } else {
       //printf("        INSERTED ERROR ON %d", g);
@@ -1382,46 +1572,37 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < 256; i++) {
     tempRoomName[i] = '\0';
   }
-  int tempProfessor = 0;
+  char tempProfessor[10];
+  for (int i = 0; i < 10; i++) {
+    tempProfessor[i] = '\0';
+  }
   int tempTimeslot = 0;
   for (int i = 0; i < classes; i++) {
     if (classArray[i]->inserted == 1) {
       buffer[0] = '\0'; //Reseting the buffer
-      tempIndex = classArray[i]->id;
+      //tempIndex = classArray[i]->id;
       //tempRoom = classArray[i]->room;
-      tempProfessor = classArray[i]->professor;
-      tempTimeslot = classArray[i]->timeslot;    
-      snprintf(intBuff, 10, "%d", tempIndex);
-      int idOffset = 6 - strlen(intBuff);
-      //printf("id buff: %s. intBuff: %s\n", idBuff, intBuff);
-      for (int j = 0; j < 8 - idOffset; j++) {
-        //printf("Replacing idBuff[%d] with intBuff[%d]\n", j + idOffset, j);
-        idBuff[j + idOffset] = intBuff[j];
-        //printf("id buff: %s\n", idBuff);
-      }
-      idBuff[8] = '\0'; 
-      strncat(buffer, idBuff, 8);
-      for (int j = 0; j < 7; j++) {
-        idBuff[j] = '0';
-      }
-      idBuff[7] = '\0';
-    
+      //tempProfessor = classArray[i]->professor;
+      strncpy(tempProfessor, professorIds[i], 10);
+      tempTimeslot = classArray[i]->timeslot;
+      //snprintf(intBuff, 10, "%d", tempIndex);
+      strncat(buffer, classArray[i]->id, 10);
       strncat(buffer, weirdTab, 2);
-      snprintf(tempRoomName, 10, "%d", classArray[i]->room);
-      strncat(buffer, tempRoomName, 10);
+      snprintf(tempRoomName, 256, "%s", roomArray[classArray[i]->room]->name);
+      strncat(buffer, tempRoomName, 256);
       strncat(buffer, weirdTab, 2);
-      snprintf(intBuff, 10, "%d", tempProfessor);
-      strncat(buffer, intBuff, 10);
+      //snprintf(intBuff, 10, "%d", tempProfessor);
+      strncat(buffer, tempProfessor, 10);
       strncat(buffer, weirdTab, 2);
       snprintf(intBuff, 10, "%d", tempTimeslot);
       strncat(buffer, intBuff, 10);
       strncat(buffer, weirdTab, 2);
       int roomSizeCheck = 0;
       for (int j = 0; j < students; j++) {
-        if (classArray[i]->students[j] == 1 && roomSizeCheck < roomArray[(classArray[i]->room - 1)]->capacity) { //This is classes * students to output. Not sure how
+        if (classArray[i]->students[j] == 1 && roomSizeCheck < roomArray[(classArray[i]->room)]->capacity) { //This is classes * students to output. Not sure how
 					     //we feel about that.
-          snprintf(intBuff, 10, "%d", j + 1);
-          strncat(buffer, intBuff, 10);
+          //snprintf(intBuff, 10, "%d", j);
+          strncat(buffer, studentArray[j]->index, 10);
           strncat(buffer, " ", 2);
 	  roomSizeCheck++;
 	  studentPreferenceValue++;
@@ -1459,7 +1640,10 @@ int main(int argc, char *argv[]) {
     printf("   total time: %d\n", totalTime);
     printf("\n");
   }*/
-
+ 
+  /*for (int i = 0; i < classrooms; i++) {
+    printf("Roomd %d: capacity %d\n", i, roomArray[i]->capacity);
+  }*/
 
   //Closing files
   fclose(fptrConstraints);
@@ -1472,11 +1656,14 @@ int main(int argc, char *argv[]) {
   }
   free(roomArray);
   for (int i = 0; i < classes; i++) {
+    free(professorIds[i]);
+    free(classArray[i]->id);
     free(classArray[i]->students);
     free(classArray[i]->conflictScores);
     free(classArray[i]->openRooms);
     free(classArray[i]);
   }
+  free(professorIds);
   free(classArray);
   for (int i = 0; i < classes; i++) {
     free(G[i]);
@@ -1484,14 +1671,17 @@ int main(int argc, char *argv[]) {
   free(G);
   for (int i = 0; i < students; i++) {
     free(studentArray[i]->prefClass);
+    free(studentArray[i]->index);
     free(studentArray[i]);
   }
   free(studentArray);
  
   for (int i = 0; i < timeslots; i++) {
+    free(timeslotAdjacencies[i]);
     free(timeslotTimeStarts[i]);
     free(timeslotTimeEnds[i]);
   }
+  free(timeslotAdjacencies);
   free(timeslotTimeStarts);
   free(timeslotTimeEnds);
 

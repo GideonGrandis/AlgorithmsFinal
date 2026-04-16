@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 100; i++) {
       temp[i] = '\0';
     }
-    strncpy(temp, "results/data_", 99);
+    strncpy(temp, "NewResults/newData_", 99);
     int index = 0;
     for (int i = 0; i < strlen(argv[1]); i++) {
       if (argv[1][i] == '/') {
@@ -31,5 +31,6 @@ int main(int argc, char *argv[]) {
       }
     }
     fprintf(fptr, "\n");
+    fclose(fptr);
     return 0;
 }
